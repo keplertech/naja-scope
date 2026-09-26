@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""naja-scope MCP server: navigate elaborated SystemVerilog designs.
+"""naja-scope MCP server: navigate elaborated HDL designs (VHDL in beta).
 
 Thin registration layer over naja_scope.api — keep docstrings tight, they are
 the tool schemas agents pay tokens for on every session."""
@@ -129,7 +129,8 @@ def load_systemverilog(
     ] = False,
 ) -> dict:
     """Elaborate local SystemVerilog sources into the active design session.
-    Use this for RTL; use load_verilog with load_liberty/load_primitives for a
+    Use this for SystemVerilog RTL; use load_vhdl for VHDL (beta), or
+    load_verilog with load_liberty/load_primitives for a
     structural gate netlist. Requires at least `files` or `flist` and changes
     the in-memory design session.
     Anonymous lowered objects are addressable by #<id>. defines are
@@ -162,6 +163,27 @@ def load_verilog(
     unless `allow_unknown_designs` is true. Gate netlists carry no source info,
     so get_source/get_intent cannot answer for them."""
     return api.load_verilog(files, keep_assigns, allow_unknown_designs)
+
+
+@_tool(annotations=SESSION_MUTATION)
+def load_vhdl(
+    file: Annotated[
+        str,
+        Field(description="One local VHDL source file path (.vhd or .vhdl)."),
+    ],
+    top: Annotated[
+        Optional[str],
+        Field(description="Top entity name; omit to infer the top."),
+    ] = None,
+) -> dict:
+    """Load VHDL into the active session (beta, restricted two-state RTL subset).
+    Load dependency/package files first, one call per file, then the top file.
+    Package-only files or entities awaiting generics may return top=null.
+    Use hierarchy, cards and connectivity queries on the elaborated design.
+    SystemVerilog intent recovery is unavailable; source ranges are not
+    guaranteed. Unsupported constructs may fail during beta development.
+    Returns the top summary when elaborated, language and beta status."""
+    return api.load_vhdl(file, top)
 
 
 @_tool(annotations=SESSION_MUTATION)
@@ -224,7 +246,7 @@ def load_snapshot(
     ] = False,
 ) -> dict:
     """Load a compatible save_snapshot directory into the active session in
-    seconds instead of re-elaborating. Use load_systemverilog/load_verilog when
+    seconds instead of re-elaborating. Use load_systemverilog/load_verilog/load_vhdl when
     no compatible snapshot exists. The directory must match this najaeda version.
     intent=True also re-elaborates the warm intent layer from the flist saved in
     the snapshot (for get_intent)."""
@@ -493,7 +515,7 @@ def load_intent(
     ] = None,
 ) -> dict:
     """Make the warm source-intent layer available for get_intent. Use after a
-    SystemVerilog load that did not retain intent; do not call for gate-level
+    SystemVerilog load that did not retain intent; do not call for VHDL or gate-level
     Verilog, and prefer `load_systemverilog(intent=True)` on the initial load.
     This is a no-op when the link is already live; otherwise it replaces the
     active universe by re-elaborating from explicit or captured `flist`/`files`.

@@ -21,10 +21,10 @@ from typing import List, Optional
 
 from najaeda import naja
 
-from .errors import SVInternalError, SVSyntaxError, SVUnsupportedError
+from .errors import ScopeError, SVInternalError, SVSyntaxError, SVUnsupportedError
 
 # najaeda>=0.7.9 introduced these typed exceptions; naja-scope currently
-# requires najaeda>=0.7.24.
+# requires najaeda>=0.7.25.
 # directly from loadSystemVerilog; anything loaded out-of-band below that floor
 # (e.g. via NAJAEDA_SRC pointing at an older checkout) only raises plain
 # RuntimeError. Detect once so classification degrades gracefully instead of
@@ -136,6 +136,25 @@ def load_verilog(files: List[str], keep_assigns: bool = True,
         preprocess_enabled=False,
         conflicting_design_name_policy="forbid",
     )
+
+
+def load_vhdl(file: str, top: Optional[str] = None):
+    """Load one VHDL source through the raw beta frontend.
+
+    Package-only files and entities awaiting generic values may return None.
+    Disable the default diagnostics file; diagnostics still go to stderr.
+    """
+    if not file or not os.path.isfile(file):
+        raise ScopeError(f"VHDL source file not found: {file}")
+    if top == "":
+        raise ScopeError("VHDL top must not be empty; omit it to infer the top.")
+    db = get_top_db()
+    if not hasattr(db, "loadVHDL"):
+        raise ScopeError("VHDL loading requires najaeda>=0.7.25.")
+    try:
+        return db.loadVHDL(file, top=top, diagnostics_report_path=None)
+    except RuntimeError as exc:
+        raise ScopeError(f"VHDL beta loading failed: {exc}") from exc
 
 
 def load_liberty(files: List[str]):

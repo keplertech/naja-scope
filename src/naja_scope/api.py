@@ -86,8 +86,9 @@ def status() -> dict:
         # Intent layer (get_intent): warm-only, so report whether it is
         # live in this session and whether the inputs to (re)load it are known.
         "intent_loaded": SESSION.intent_available,
-        "intent_loadable": bool((SESSION.load_spec or {}).get("flist")
-                                or (SESSION.load_spec or {}).get("files")),
+        "intent_loadable": (SESSION.load_spec.get("language") != "vhdl"
+                            and bool(SESSION.load_spec.get("flist")
+                                     or SESSION.load_spec.get("files"))),
     }
     return out
 
@@ -135,6 +136,18 @@ def load_verilog(files: List[str], keep_assigns: bool = True,
         files, keep_assigns=keep_assigns,
         allow_unknown_designs=allow_unknown_designs)
     return {"top": _summary(top_instance)}
+
+
+def load_vhdl(file: str, top: Optional[str] = None) -> dict:
+    """Load a single VHDL file using najaeda's beta frontend."""
+    node = SESSION.load_vhdl(file, top=top)
+    out = {"top": _summary(node) if node is not None else None,
+           "language": "vhdl", "beta": True, "intent_loaded": False}
+    if node is None:
+        out["note"] = ("Source retained without elaborating a top; package-only "
+                       "files and entities with required generics can do this. "
+                       "Load the dependent top file next.")
+    return out
 
 
 def load_liberty(files: List[str]) -> dict:

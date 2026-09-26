@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "naja-scope"
 dynamic = ["version"]
-description = "Agent-facing MCP query layer over najaeda: navigate elaborated SystemVerilog designs without loading source into context."
+description = "Agent-facing MCP query layer over najaeda: navigate elaborated SystemVerilog and VHDL designs without loading source into context."
 readme = "README_PyPI.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -13,11 +13,10 @@ requires-python = ">=3.10"
 authors = [
     { name = "Kepler Technologies", email = "contact@keplertech.io" },
 ]
-keywords = ["mcp", "systemverilog", "eda", "netlist", "rtl", "najaeda", "llm", "agent"]
+keywords = ["mcp", "systemverilog", "vhdl", "eda", "netlist", "rtl", "najaeda", "llm", "agent"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Operating System :: Microsoft :: Windows",
@@ -31,7 +30,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "najaeda>=0.7.24",
+    "najaeda>=0.7.25",
     "mcp>=1.28,<2",
 ]
 

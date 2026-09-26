@@ -15,6 +15,15 @@ gets back small, exact answers with file-and-line references.
 
 Built on the [najaeda](https://github.com/najaeda/naja) netlist engine.
 
+**VHDL loading is available in beta** with najaeda 0.7.25 or newer. Call
+`load_vhdl(file="/path/to/design.vhd", top="my_entity")` to explore its
+elaborated hierarchy and connectivity. Load dependencies/packages first,
+one file per call; package-only files may return `top: null` until the top
+file is loaded. The frontend supports a restricted two-state RTL subset,
+and supported constructs may change. `get_intent`/`load_intent` remain
+SystemVerilog-only; VHDL source ranges are not guaranteed.
+
+
 ---
 
 ## Why

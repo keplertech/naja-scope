@@ -13,21 +13,20 @@ concurrency:
 
 defaults:
   run:
-    # bash is available on all three GitHub-hosted runners (Git Bash on
-    # Windows), so the same step commands behave identically everywhere.
+    # Git Bash is available on the Windows runner, so all jobs can share the
+    # same commands.
     shell: bash
 
 jobs:
-  test:
-    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
-    runs-on: ${{ matrix.os }}
+  python-versions:
+    name: Python ${{ matrix.python-version }} (Linux x86_64)
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        # Test on the three OSes naja-scope claims to support. najaeda ships
-        # wheels for each (macOS arm64, win_amd64, manylinux) on these Pythons.
-        # 3.15 is still a prerelease, hence -dev + allow-prereleases below.
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # naja-scope is pure Python, while najaeda publishes a wheel for each
+        # of these CPython versions. Keep language-version coverage separate
+        # from the native platform matrix to avoid a large Cartesian product.
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15-dev"]
     steps:
       - uses: actions/checkout@v7
@@ -38,23 +37,99 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
-      - name: Install package + test deps
+      - name: Verify runner architecture
+        run: python ci/check_architecture.py x86_64
+
+      - name: Install package + test dependencies
         run: |
           python -m pip install --upgrade pip
-          # pulls najaeda>=0.7.24 (ships cp310..cp315 wheels) and mcp from PyPI
-          pip install -e . pytest
+          # Fail instead of silently compiling if a supported Linux wheel is
+          # missing for one of the advertised Python versions.
+          python -m pip install --only-binary=najaeda -e . pytest
 
       - name: Run tests
         # The CVA6 regressions self-skip without a local snapshot (absent on
         # CI); the fast structural + intent + snapshot suite runs.
         run: python -m pytest -q
 
-      - name: Run the bundled example scripts
-        # Smoke-tests the exact commands examples/README.md documents (not
-        # just the answers pytest pins) -- these are small and self-contained
-        # (no external clone), so they run on every OS/Python combo. The CVA6
-        # demo has its own external-clone dependency and runs in a separate
-        # workflow (cva6-demo.yml), not here.
+      - name: Run bundled example scripts
+        run: |
+          python examples/walkthrough.py
+          python examples/gate_level.py
+
+  platforms:
+    name: ${{ matrix.name }} (Python 3.13)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-24.04
+            expected_architecture: x86_64
+            najaeda_source_build: false
+          - name: Linux aarch64
+            os: ubuntu-24.04-arm
+            expected_architecture: aarch64
+            najaeda_source_build: false
+          - name: macOS arm64
+            os: macos-15
+            expected_architecture: aarch64
+            najaeda_source_build: false
+          - name: macOS x86_64
+            os: macos-15-intel
+            expected_architecture: x86_64
+            # najaeda does not currently publish macOS x86_64 wheels. Building
+            # its sdist here verifies that the native fallback remains usable.
+            najaeda_source_build: true
+          - name: Windows x86_64
+            os: windows-2025
+            expected_architecture: x86_64
+            najaeda_source_build: false
+        # Windows arm64 is not listed because najaeda does not currently ship
+        # a win_arm64 wheel or support that source-build path.
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Verify runner architecture
+        run: python ci/check_architecture.py "${{ matrix.expected_architecture }}"
+
+      - name: Install najaeda source-build dependencies
+        if: matrix.najaeda_source_build
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: brew install cmake boost capnp tbb
+
+      - name: Install najaeda from source
+        if: matrix.najaeda_source_build
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: "4"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-binary=najaeda "najaeda>=0.7.25"
+
+      - name: Install package + test dependencies from wheels
+        if: ${{ !matrix.najaeda_source_build }}
+        run: |
+          python -m pip install --upgrade pip
+          # These are the platforms for which najaeda promises binary wheels;
+          # fail clearly if the expected native artifact is absent.
+          python -m pip install --only-binary=najaeda -e . pytest
+
+      - name: Install package + test dependencies after source build
+        if: matrix.najaeda_source_build
+        run: python -m pip install -e . pytest
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Run bundled example scripts
         run: |
           python examples/walkthrough.py
           python examples/gate_level.py
