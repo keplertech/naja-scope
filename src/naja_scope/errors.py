@@ -25,7 +25,7 @@ class ScopeError(Exception):
 class NoDesignError(ScopeError):
     def __init__(self):
         super().__init__(
-            "No design loaded. Call load_systemverilog / load_verilog / "
+            "No design loaded. Call load_systemverilog / load_verilog / load_vhdl / "
             "load_snapshot first."
         )
 

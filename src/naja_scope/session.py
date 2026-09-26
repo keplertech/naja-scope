@@ -91,6 +91,13 @@ class Session:
                           "top": None}
         return snl.top_node()
 
+    def load_vhdl(self, file: str, top: Optional[str] = None):
+        design = loader.load_vhdl(file, top=top)
+        self._record_sources([file])
+        self.load_spec = {"language": "vhdl", "files": list(self.loaded_files),
+                          "top": top}
+        return snl.top_node() if design is not None else None
+
     # -- intent layer --------------------------------------------------------
 
     def load_intent(self, flist: Optional[str] = None,
@@ -106,6 +113,9 @@ class Session:
         Re-elaboration is cheap (~12s cva6-small / ~29s cva6-full). The exact
         relink-without-re-elaboration tier is not yet implemented.
         """
+        if self.load_spec.get("language") == "vhdl":
+            raise ScopeError("The intent layer is SystemVerilog-only; "
+                             "VHDL beta sessions do not support load_intent.")
         if naja.intent_available():
             return self.intent
         spec = self.load_spec or {}

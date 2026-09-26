@@ -17,6 +17,15 @@ gets back small, exact answers with file-and-line references.
 
 Built on the [najaeda](https://github.com/najaeda/naja) netlist engine.
 
+**VHDL loading is available in beta** with najaeda 0.7.25 or newer. Call
+`load_vhdl(file="/path/to/design.vhd", top="my_entity")` to explore its
+elaborated hierarchy and connectivity. Load dependencies/packages first,
+one file per call; package-only files may return `top: null` until the top
+file is loaded. The frontend supports a restricted two-state RTL subset,
+and supported constructs may change. `get_intent`/`load_intent` remain
+SystemVerilog-only; VHDL source ranges are not guaranteed.
+
+
 ---
 
 ## Why
@@ -224,6 +233,11 @@ The full test suite runs against a plain `pip install` of `najaeda` — no nativ
 build required. The CVA6 cross-hierarchy cone regression
 (`tests/test_zzz_cone_cva6.py`) is slow and skips automatically unless a CVA6
 snapshot is present.
+
+CI tests every supported Python version on Linux x86_64, plus native platform
+lanes for Linux x86_64/aarch64, macOS x86_64/arm64, and Windows x86_64. The
+macOS x86_64 lane builds `najaeda` from its source distribution because PyPI
+does not currently provide an Intel macOS wheel.
 
 ---
 
