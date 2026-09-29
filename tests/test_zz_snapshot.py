@@ -172,7 +172,7 @@ def test_server_tools_registered():
     read_only = {
         "status", "resolve", "find", "get_hierarchy", "get_drivers",
         "get_loads", "trace_cone", "get_source", "get_module_card",
-        "get_stats", "get_intent",
+        "get_stats", "get_intent", "get_schematic_selection",
     }
     for name in read_only:
         assert tools_by_name[name].annotations.readOnlyHint is True

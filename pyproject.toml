@@ -34,6 +34,9 @@ dependencies = [
     "mcp>=1.28,<2",
 ]
 
+[project.optional-dependencies]
+schematic = ["naja-schematic>=0.1.6,<0.2"]
+
 [project.urls]
 Homepage = "https://github.com/najaeda/naja-scope"
 Repository = "https://github.com/najaeda/naja-scope"

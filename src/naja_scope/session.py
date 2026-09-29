@@ -15,6 +15,7 @@ from najaeda import naja
 
 from . import loader, snl
 from .errors import NoDesignError, ScopeError
+from .runtime import design_mutation, serialized
 
 _SIDECAR_META = "naja_scope_session.json"
 
@@ -41,6 +42,7 @@ class Session:
 
     # -- lifecycle -----------------------------------------------------------
 
+    @design_mutation
     def reset(self):
         loader.reset_universe()
         self.__init__()
@@ -63,6 +65,7 @@ class Session:
         if cwd not in self.source_dirs:
             self.source_dirs.append(cwd)
 
+    @design_mutation
     def load_systemverilog(self, files: List[str], flist: Optional[str] = None,
                            top: Optional[str] = None,
                            keep_assigns: bool = True,
@@ -82,6 +85,7 @@ class Session:
                           "allow_unknown_designs": allow_unknown_designs}
         return snl.top_node()
 
+    @design_mutation
     def load_verilog(self, files: List[str], keep_assigns: bool = True,
                      allow_unknown_designs: bool = False) -> "snl.InstNode":
         loader.load_verilog(files, keep_assigns=keep_assigns,
@@ -91,6 +95,7 @@ class Session:
                           "top": None}
         return snl.top_node()
 
+    @design_mutation
     def load_vhdl(self, file: str, top: Optional[str] = None):
         design = loader.load_vhdl(file, top=top)
         self._record_sources([file])
@@ -100,6 +105,7 @@ class Session:
 
     # -- intent layer --------------------------------------------------------
 
+    @design_mutation
     def load_intent(self, flist: Optional[str] = None,
                     files: Optional[List[str]] = None,
                     top: Optional[str] = None,
@@ -158,6 +164,7 @@ class Session:
 
     # -- snapshots ------------------------------------------------------------
 
+    @serialized
     def save_snapshot(self, directory: str) -> dict:
         self.require_top()
         loader.dump_naja_if(directory)
@@ -173,6 +180,7 @@ class Session:
                        "load_spec": self.load_spec}, f)
         return {"path": directory}
 
+    @design_mutation
     def load_snapshot(self, directory: str) -> "snl.InstNode":
         if not os.path.isdir(directory):
             raise ScopeError(f"Snapshot directory not found: {directory}")

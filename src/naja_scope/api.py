@@ -22,6 +22,7 @@ from .paging import clamp_limit, paginate
 from .resolve import (Resolved, describe, resolve_path, source_range,
                       source_ref)
 from .session import SESSION
+from .runtime import serialized, design_mutation
 
 MAX_SOURCE_LINES = 120
 DEFAULT_SOURCE_CONTEXT = 3
@@ -75,6 +76,7 @@ def _attach_intent(out: dict, explicit: bool) -> dict:
     return out
 
 
+@serialized
 def status() -> dict:
     if not SESSION.has_top():
         return {"loaded": False}
@@ -93,6 +95,7 @@ def status() -> dict:
     return out
 
 
+@serialized
 def load_systemverilog(files: Optional[List[str]] = None,
                        flist: Optional[str] = None,
                        top: Optional[str] = None,
@@ -119,6 +122,7 @@ def load_systemverilog(files: Optional[List[str]] = None,
     return out
 
 
+@serialized
 def load_intent(flist: Optional[str] = None, files: Optional[List[str]] = None,
                 top: Optional[str] = None, env: Optional[dict] = None) -> dict:
     """Make the warm intent layer available (naja's in-engine SNL↔slang link).
@@ -130,6 +134,7 @@ def load_intent(flist: Optional[str] = None, files: Optional[List[str]] = None,
     return {"intent_loaded": SESSION.intent_available}
 
 
+@serialized
 def load_verilog(files: List[str], keep_assigns: bool = True,
                  allow_unknown_designs: bool = False) -> dict:
     top_instance = SESSION.load_verilog(
@@ -138,6 +143,7 @@ def load_verilog(files: List[str], keep_assigns: bool = True,
     return {"top": _summary(top_instance)}
 
 
+@serialized
 def load_vhdl(file: str, top: Optional[str] = None) -> dict:
     """Load a single VHDL file using najaeda's beta frontend."""
     node = SESSION.load_vhdl(file, top=top)
@@ -150,11 +156,13 @@ def load_vhdl(file: str, top: Optional[str] = None) -> dict:
     return out
 
 
+@design_mutation
 def load_liberty(files: List[str]) -> dict:
     loader.load_liberty(files)
     return {"ok": True}
 
 
+@design_mutation
 def load_primitives(name: Optional[str] = None,
                     file: Optional[str] = None) -> dict:
     if name:
@@ -166,10 +174,12 @@ def load_primitives(name: Optional[str] = None,
     return {"ok": True}
 
 
+@serialized
 def save_snapshot(directory: str) -> dict:
     return SESSION.save_snapshot(directory)
 
 
+@serialized
 def load_snapshot(directory: str, intent: bool = False) -> dict:
     top_instance = SESSION.load_snapshot(directory)
     # intent re-elaborates from the flist persisted in the snapshot sidecar
@@ -177,6 +187,7 @@ def load_snapshot(directory: str, intent: bool = False) -> dict:
     return _attach_intent({"top": _summary(top_instance)}, explicit=intent)
 
 
+@serialized
 def reset_universe() -> dict:
     SESSION.reset()
     return {"ok": True}
@@ -184,6 +195,7 @@ def reset_universe() -> dict:
 
 # -- navigation ----------------------------------------------------------------
 
+@serialized
 def resolve(path: str, kind: Optional[str] = None,
             limit: Optional[int] = None) -> dict:
     limit = clamp_limit(limit, default=20)
@@ -193,6 +205,7 @@ def resolve(path: str, kind: Optional[str] = None,
             "truncated": len(matches) > limit}
 
 
+@serialized
 def find(pattern: str, kind: str = "any", limit: Optional[int] = None,
          cursor: Optional[str] = None) -> dict:
     """DFS over the hierarchy matching names (and full paths if the pattern
@@ -249,6 +262,7 @@ def find(pattern: str, kind: str = "any", limit: Optional[int] = None,
     return {"pattern": pattern, "kind": kind, "matches": page, **envelope}
 
 
+@serialized
 def get_hierarchy(path: Optional[str] = None, depth: int = 1,
                   limit: Optional[int] = None,
                   cursor: Optional[str] = None) -> dict:
@@ -310,18 +324,21 @@ def _resolve_single(path: str, kinds=("term", "net")) -> Resolved:
     return matches[0]
 
 
+@serialized
 def get_drivers(path: str, limit: Optional[int] = None) -> dict:
     resolved = _resolve_single(path)
     return connectivity.endpoints(resolved, SESSION, "drivers",
                                   clamp_limit(limit))
 
 
+@serialized
 def get_loads(path: str, limit: Optional[int] = None) -> dict:
     resolved = _resolve_single(path)
     return connectivity.endpoints(resolved, SESSION, "loads",
                                   clamp_limit(limit))
 
 
+@serialized
 def trace_cone(path: str, direction: str,
                max_frontier: int = cone_mod.DEFAULT_MAX_FRONTIER) -> dict:
     resolved = _resolve_single(path)
@@ -331,6 +348,7 @@ def trace_cone(path: str, direction: str,
 
 # -- source -----------------------------------------------------------------------
 
+@serialized
 def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT) -> dict:
     context_lines = max(0, min(context_lines, 20))
     matches = resolve_path(SESSION, path)
@@ -390,6 +408,7 @@ def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT) -> dict:
 
 # -- summaries ---------------------------------------------------------------------
 
+@serialized
 def get_module_card(module: str) -> dict:
     return cards_mod.module_card(SESSION, module)
 
@@ -442,6 +461,7 @@ def _collect_model_stats(design, memo: dict) -> dict:
     return entry
 
 
+@serialized
 def get_stats(path: Optional[str] = None, limit: Optional[int] = None,
               cursor: Optional[str] = None) -> dict:
     limit = clamp_limit(limit, default=25)
@@ -469,6 +489,7 @@ def get_stats(path: Optional[str] = None, limit: Optional[int] = None,
 
 # -- intent layer -----------------------------------------------------------
 
+@serialized
 def get_intent(ref: str, want: str = "auto") -> dict:
     """Query the living-intent layer for source-level facts erased by lowering.
 
@@ -510,6 +531,7 @@ def python_enabled() -> bool:
     return bool(os.environ.get("NAJA_SCOPE_ENABLE_PYTHON"))
 
 
+@design_mutation
 def query_python(code: str) -> dict:
     """Run najaeda/naja query code against the live session (prep hook 3).
     Read-only by convention; output capped."""
@@ -544,3 +566,22 @@ def _cap(text: str) -> str:
         return text
     return (text[:QUERY_OUTPUT_CAP]
             + f"\n... (truncated, {len(text) - QUERY_OUTPUT_CAP} chars omitted)")
+
+
+# Imported lazily so a normal installation needs no viewer dependencies.
+@serialized
+def open_schematic(path: Optional[str] = None) -> dict:
+    from .schematic import open_schematic as open_view
+    return open_view(path)
+
+
+@serialized
+def annotate_schematic(items: List[dict]) -> dict:
+    from .schematic import annotate_schematic as annotate
+    return annotate(items)
+
+
+@serialized
+def get_schematic_selection() -> dict:
+    from .schematic import get_schematic_selection as selection
+    return selection()
