@@ -84,6 +84,32 @@ def _tool(*, annotations: ToolAnnotations) -> Callable:
     return decorator
 
 
+@_tool(annotations=SESSION_MUTATION)
+def open_schematic(
+    path: Annotated[Optional[str], Field(description="Instance path to focus; omit for the top.")] = None,
+) -> dict:
+    """Serve an interactive browser schematic of the current design. Returns a
+    local URL to open on the MCP server's machine; requires the schematic extra.
+    Uses the loaded design and supports anonymous #id instances."""
+    return api.open_schematic(path)
+
+
+@_tool(annotations=SESSION_MUTATION)
+def annotate_schematic(
+    items: Annotated[List[dict], Field(description="Up to 200 annotations: path (scope path), kind (instance or term), severity (info, warning, error), message (up to 2000 characters). Whole pins/ports only; [] clears overlays.")],
+) -> dict:
+    """Replace schematic annotations on instances or pins/ports. Returns the
+    local viewer URL and count. Annotations clear when the design changes."""
+    return api.annotate_schematic(items)
+
+
+@_tool(annotations=READ_ONLY)
+def get_schematic_selection() -> dict:
+    """Return the last browser-selected instance as a naja-scope path, or null.
+    Use the returned path with module-card, source, or hierarchy tools."""
+    return api.get_schematic_selection()
+
+
 @_tool(annotations=READ_ONLY)
 def status() -> dict:
     """Inspect the current in-memory session without changing it. Use this
@@ -596,7 +622,11 @@ def main():
     os.dup2(2, 1)
     sys.stdout = io.TextIOWrapper(os.fdopen(real_stdout, "wb"),
                                   encoding="utf-8", line_buffering=True)
-    mcp.run(transport=args.transport)
+    try:
+        mcp.run(transport=args.transport)
+    finally:
+        from .schematic import close
+        close()
 
 
 if __name__ == "__main__":

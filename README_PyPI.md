@@ -190,3 +190,31 @@ Once a design is loaded, your assistant can:
 ## License
 
 Apache-2.0. See [LICENSE](https://github.com/najaeda/naja-scope/blob/main/LICENSE).
+
+## Optional browser schematic
+
+Requires **naja-schematic 0.1.6 or later** (the release containing the
+embeddable viewer API):
+
+```bash
+pip install "naja-scope[schematic]"
+```
+
+Restart the MCP server after installation. Load a design as usual, then use:
+
+- `open_schematic(path="top.u_cpu")`: returns a local browser URL and focuses
+  the instance. Omit `path` for the top. Anonymous `#id` instances are supported.
+- `annotate_schematic(items=[{"path": "top.u_cpu", "message": "Check reset",
+  "severity": "warning"}])`: replaces the overlay. Use `kind="term"` with a
+  pin/port path to annotate that terminal; annotations apply to the whole port,
+  not individual bus bits. Pass `items=[]` to clear. At most 200 annotations,
+  each with at most 2000 message characters.
+- `get_schematic_selection()`: returns the last clicked instance as a regular
+  naja-scope path, usable with source, hierarchy and module-card queries.
+
+The viewer shares the existing raw naja universe; it does not elaborate again.
+The server binds to loopback and returns a token-bearing URL. Open that URL on
+**the machine running the MCP server**; it is not a remote or embedded MCP UI.
+Treat the URL as access to the loaded design. Design loads/resets refresh open
+viewers and clear selection, focus and annotations. The browser server stops
+with naja-scope. Existing tools remain usable without the schematic extra.
