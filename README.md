@@ -1,5 +1,7 @@
 # naja-scope
 
+<!-- mcp-name: io.github.najaeda/naja-scope -->
+
 [![PyPI version](https://img.shields.io/pypi/v/naja-scope.svg)](https://pypi.org/project/naja-scope/)
 [![Python versions](https://img.shields.io/pypi/pyversions/naja-scope.svg)](https://pypi.org/project/naja-scope/)
 [![CI](https://github.com/najaeda/naja-scope/actions/workflows/ci.yml/badge.svg)](https://github.com/najaeda/naja-scope/actions/workflows/ci.yml)
@@ -17,16 +19,17 @@ gets back small, exact answers with file-and-line references.
 
 Built on the [najaeda](https://github.com/najaeda/naja) netlist engine.
 
+> **On a 17-question [CVA6](https://github.com/openhwgroup/cva6) benchmark,
+> the same Claude Code agent scored 17/17 with naja-scope versus 10/17 with
+> grep/read source tools — in 77 turns instead of 123, processing about 5×
+> less input.** [How it was measured ↓](#does-it-actually-help)
+
+```sh
+pip install naja-scope
+claude mcp add naja-scope -- naja-scope-mcp
+```
+
 ![naja-scope demo: a real Claude Code session tracing drivers and a fan-in cone on a UART design, using only naja-scope tools](docs/demo/naja-scope-demo.gif)
-
-**VHDL loading is available in beta** with najaeda 0.7.25 or newer. Call
-`load_vhdl(file="/path/to/design.vhd", top="my_entity")` to explore its
-elaborated hierarchy and connectivity. Load dependencies/packages first,
-one file per call; package-only files may return `top: null` until the top
-file is loaded. The frontend supports a restricted two-state RTL subset,
-and supported constructs may change. `get_intent`/`load_intent` remain
-SystemVerilog-only; VHDL source ranges are not guaranteed.
-
 
 ---
 
@@ -49,7 +52,8 @@ turns your design into something an agent can *navigate*:
 Works on **RTL and gate-level netlists** alike: load elaborated SystemVerilog,
 or load a post-synthesis structural Verilog netlist together with its Liberty
 standard-cell library and navigate the gates the same way (see
-[Gate-level designs](#gate-level-designs)).
+[Gate-level designs](#gate-level-designs)). VHDL loading is in
+[beta](#vhdl-beta).
 
 All responses are token-bounded: lists paginate, large results truncate with
 clear markers. Your context stays small; your answers stay accurate.
@@ -169,6 +173,18 @@ all work on the netlist; cones stop at the sequential cells. A gate netlist
 carries no source line info, so `get_source` applies to RTL only. A runnable
 example lives in [`examples/`](examples/) (`stdcells.lib` + `counter2.v` +
 `gate_level.py`).
+
+---
+
+## VHDL (beta)
+
+VHDL loading is available in beta with najaeda 0.7.25 or newer. Call
+`load_vhdl(file="/path/to/design.vhd", top="my_entity")` to explore its
+elaborated hierarchy and connectivity. Load dependencies/packages first,
+one file per call; package-only files may return `top: null` until the top
+file is loaded. The frontend supports a restricted two-state RTL subset,
+and supported constructs may change. `get_intent`/`load_intent` remain
+SystemVerilog-only; VHDL source ranges are not guaranteed.
 
 ---
 

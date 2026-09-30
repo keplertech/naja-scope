@@ -50,6 +50,9 @@ Issues = "https://github.com/najaeda/naja-scope/issues"
 
 [project.scripts]
 naja-scope-mcp = "naja_scope.server:main"
+# Same entry point under the package name, so `uvx naja-scope` (what MCP
+# Registry clients run for a PyPI server) starts the server.
+naja-scope = "naja_scope.server:main"
 
 [tool.setuptools.dynamic]
 version = { attr = "naja_scope.__version__" }

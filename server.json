@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.najaeda/naja-scope",
+  "title": "naja-scope",
+  "description": "Let AI agents explore SystemVerilog/Verilog designs: trace connectivity, hierarchy, source.",
+  "repository": {
+    "url": "https://github.com/najaeda/naja-scope",
+    "source": "github"
+  },
+  "version": "0.1.17",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "naja-scope",
+      "version": "0.1.17",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
