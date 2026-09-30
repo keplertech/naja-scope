@@ -17,6 +17,8 @@ gets back small, exact answers with file-and-line references.
 
 Built on the [najaeda](https://github.com/najaeda/naja) netlist engine.
 
+![naja-scope demo: a real Claude Code session tracing drivers and a fan-in cone on a UART design, using only naja-scope tools](docs/demo/naja-scope-demo.gif)
+
 **VHDL loading is available in beta** with najaeda 0.7.25 or newer. Call
 `load_vhdl(file="/path/to/design.vhd", top="my_entity")` to explore its
 elaborated hierarchy and connectivity. Load dependencies/packages first,
