@@ -50,7 +50,7 @@ class ResolveError(ScopeError):
 # the caller's fault; the agent should treat the other two differently (no
 # "fix your code" framing) and point the user at naja-scope's issue tracker.
 
-_NAJA_SCOPE_ISSUES = "https://github.com/najaeda/naja-scope/issues"
+_NAJA_SCOPE_ISSUES = "https://github.com/keplertech/naja-scope/issues"
 
 
 class SVSyntaxError(ScopeError):

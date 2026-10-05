@@ -38,9 +38,9 @@ dependencies = [
 schematic = ["naja-schematic>=0.1.6,<0.2"]
 
 [project.urls]
-Homepage = "https://github.com/najaeda/naja-scope"
-Repository = "https://github.com/najaeda/naja-scope"
-Issues = "https://github.com/najaeda/naja-scope/issues"
+Homepage = "https://github.com/keplertech/naja-scope"
+Repository = "https://github.com/keplertech/naja-scope"
+Issues = "https://github.com/keplertech/naja-scope/issues"
 
 # The living-intent layer (get_intent) needs NO extra Python dependency: it
 # is a thin client over naja's in-engine SNL↔slang link (naja.intent_*), which

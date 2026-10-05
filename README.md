@@ -1,10 +1,10 @@
 # naja-scope
 
-<!-- mcp-name: io.github.najaeda/naja-scope -->
+<!-- mcp-name: io.github.keplertech/naja-scope -->
 
 [![PyPI version](https://img.shields.io/pypi/v/naja-scope.svg)](https://pypi.org/project/naja-scope/)
 [![Python versions](https://img.shields.io/pypi/pyversions/naja-scope.svg)](https://pypi.org/project/naja-scope/)
-[![CI](https://github.com/najaeda/naja-scope/actions/workflows/ci.yml/badge.svg)](https://github.com/najaeda/naja-scope/actions/workflows/ci.yml)
+[![CI](https://github.com/keplertech/naja-scope/actions/workflows/ci.yml/badge.svg)](https://github.com/keplertech/naja-scope/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Glama quality](https://glama.ai/mcp/servers/najaeda/naja-scope/badges/score.svg)](https://glama.ai/mcp/servers/najaeda/naja-scope)
 
@@ -262,7 +262,7 @@ does not currently provide an Intel macOS wheel.
 ## Support & contact
 
 - 🐛 **Found a bug or have a feature request?**
-  [Open an issue on GitHub →](https://github.com/najaeda/naja-scope/issues)
+  [Open an issue on GitHub →](https://github.com/keplertech/naja-scope/issues)
 - 📫 **Get in touch:** [contact@keplertech.io](mailto:contact@keplertech.io)
 
 ---

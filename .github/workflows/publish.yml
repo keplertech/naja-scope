@@ -38,7 +38,7 @@ jobs:
   test-pypi:
     name: Upload to TestPyPI
     needs: build
-    if: github.repository == 'najaeda/naja-scope' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.repository == 'keplertech/naja-scope' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -60,7 +60,7 @@ jobs:
   pypi:
     name: Upload release to PyPI
     needs: test-pypi
-    if: github.repository == 'najaeda/naja-scope' && github.ref_type == 'tag'
+    if: github.repository == 'keplertech/naja-scope' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -80,7 +80,7 @@ jobs:
   github-release:
     name: Create GitHub Release
     needs: pypi
-    if: github.repository == 'najaeda/naja-scope' && github.ref_type == 'tag'
+    if: github.repository == 'keplertech/naja-scope' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: write
