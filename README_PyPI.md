@@ -1,10 +1,10 @@
 # naja-scope
 
-<!-- mcp-name: io.github.najaeda/naja-scope -->
+<!-- mcp-name: io.github.keplertech/naja-scope -->
 
 [![PyPI version](https://img.shields.io/pypi/v/naja-scope.svg)](https://pypi.org/project/naja-scope/)
 [![Python versions](https://img.shields.io/pypi/pyversions/naja-scope.svg)](https://pypi.org/project/naja-scope/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/najaeda/naja-scope/blob/main/LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/keplertech/naja-scope/blob/main/LICENSE)
 
 **Let your AI assistant explore SystemVerilog designs — without pasting source code into the chat.**
 
@@ -20,14 +20,14 @@ Built on the [najaeda](https://github.com/najaeda/naja) netlist engine.
 > **On a 17-question [CVA6](https://github.com/openhwgroup/cva6) benchmark,
 > the same Claude Code agent scored 17/17 with naja-scope versus 10/17 with
 > grep/read source tools — in 77 turns instead of 123, processing about 5×
-> less input.** [How it was measured](https://github.com/najaeda/naja-scope#does-it-actually-help)
+> less input.** [How it was measured](https://github.com/keplertech/naja-scope#does-it-actually-help)
 
 ```sh
 pip install naja-scope
 claude mcp add naja-scope -- naja-scope-mcp
 ```
 
-See it in action: [demo recording](https://github.com/najaeda/naja-scope#naja-scope).
+See it in action: [demo recording](https://github.com/keplertech/naja-scope#naja-scope).
 
 ---
 
@@ -83,8 +83,8 @@ Source search remains the right tool for local textual questions. naja-scope
 adds the elaborated hierarchy, connectivity, lowered primitives, and generated
 or uniquified structures that are otherwise difficult to reconstruct.
 
-See the [benchmark methodology and multi-model runner](https://github.com/najaeda/naja-scope/tree/main/benchmarks)
-and [historical result record](https://github.com/najaeda/naja-scope/blob/main/benchmarks/historical-cva6-20260628.json)
+See the [benchmark methodology and multi-model runner](https://github.com/keplertech/naja-scope/tree/main/benchmarks)
+and [historical result record](https://github.com/keplertech/naja-scope/blob/main/benchmarks/historical-cva6-20260628.json)
 for configuration, scoring, token accounting, and reproducibility details.
 
 ---
@@ -200,14 +200,14 @@ Once a design is loaded, your assistant can:
 ## Support & contact
 
 - 🐛 **Found a bug or have a feature request?**
-  [Open an issue on GitHub →](https://github.com/najaeda/naja-scope/issues)
+  [Open an issue on GitHub →](https://github.com/keplertech/naja-scope/issues)
 - 📫 **Get in touch:** [contact@keplertech.io](mailto:contact@keplertech.io)
 
 ---
 
 ## License
 
-Apache-2.0. See [LICENSE](https://github.com/najaeda/naja-scope/blob/main/LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/keplertech/naja-scope/blob/main/LICENSE).
 
 ## Optional browser schematic
 
