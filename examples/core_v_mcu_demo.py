@@ -85,8 +85,13 @@ def main():
     print(f"  flattened leaf gates    : {root['flat_leaves']:,}")
     print(f"  sequential instances    : {root['flat_sequential']:,}")
     print(f"  distinct model variants : {stats['total_models']}")
-    assert root["flat_leaves"] > 700_000
-    assert root["flat_sequential"] > 90_000
+    # Revalidated on the pinned CORE-V-MCU commit with najaeda 0.7.27.
+    # Its wildcard-case sequential lowering changes the CSR implementation:
+    # 0.7.25 produced 722,402 leaves / 97,376 sequential instances. These
+    # count native instances, including word-wide cells, rather than RTL bits.
+    assert root["flat_leaves"] == 634_875, "elaborated leaf count drifted"
+    assert root["flat_sequential"] == 6_501, "sequential instance count drifted"
+    assert stats["total_models"] == 320, "elaborated model count drifted"
 
     banner('Q: "Which modules resolve as blackboxes (undelivered hard '
            'macros), with allow_unknown_designs=True?"')
@@ -116,7 +121,9 @@ def main():
         print(f"    - {model}: {n}")
     # TraverseAssigns crosses lowered assign glue, exposing the full set of
     # meaningful endpoints on this clock network.
-    assert loads["equipotential_size"] == 1635, (
+    # The same pin reaches 1,705 endpoints with najaeda 0.7.27's lowering
+    # (1,635 with 0.7.25); the hierarchy path and blackbox set are unchanged.
+    assert loads["equipotential_size"] == 1705, (
         "clock net fan-out drifted -- re-check the CDC instance path above")
 
     print("\nDone. A handful of small, exact calls answered structural, "
