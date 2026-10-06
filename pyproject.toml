@@ -30,7 +30,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "najaeda>=0.7.25",
+    "najaeda>=0.7.27",
     "mcp>=1.28,<2",
 ]
 
