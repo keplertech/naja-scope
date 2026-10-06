@@ -112,7 +112,7 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: "4"
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --no-binary=najaeda "najaeda>=0.7.25"
+          python -m pip install --no-binary=najaeda "najaeda>=0.7.27"
 
       - name: Install package + test dependencies from wheels
         if: ${{ !matrix.najaeda_source_build }}

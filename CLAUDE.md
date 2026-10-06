@@ -32,17 +32,25 @@ CVA6 regressions, check the latest upstream CVA6 release and default-branch
 revision to see whether the pinned baseline can be updated. Do not leave
 CVA6 pinned indefinitely without retrying newer revisions.
 
-As of 2026-09-26, the verified local regression baseline is CVA6 v5.3.0
+As of 2026-10-06, the verified local regression baseline is CVA6 v5.3.0
 (`2ef1c1b1fca419354920c5487293bc605294904e`), configuration
-`cv32a6_imac_sv32`, with najaeda 0.7.25. All three tests in
+`cv32a6_imac_sv32`, with najaeda 0.7.27. All three tests in
 `tests/test_zzz_cone_cva6.py` and `tests/test_zzz_hierarchy_cva6.py` pass
 against its rebuilt snapshot. The demo also pins v5.3.0 in
-`examples/_cva6_fetch.sh`.
+`examples/_cva6_fetch.sh`; its default `cv64a6_imafdc_sv39` demo also passes
+with najaeda 0.7.27.
 
-The newer CVA6 checkout at `d40b9540` failed with both najaeda 0.7.24 and
-0.7.25 in `core/cva6_mmu/cva6_mmu.sv:375`: "unable to resolve always_comb
-condition bit for kind#0". An upstream CVA6 issue has been opened; check its
-status and retry rather than assuming the limitation remains.
+The latest upstream release remains v5.3.0. Upstream master
+`81245a47fad8fe1a5d562d953ef2662e099def76` was retried on 2026-10-06 in an
+isolated checkout with its pinned submodules and najaeda 0.7.27. The
+`cv32a6_imac_sv32` raw-API elaboration still fails: the MMU's `always_comb`
+condition contains an `InvalidExpression` at `core/cva6_mmu/cva6_mmu.sv:404`,
+and six continuous assignments in hpdcache report unsupported RHS calls
+(lines 1196, 1204, 1212, 1268, 1269, 1270). The related upstream issue
+[CVA6 #3594](https://github.com/openhwfoundation/cva6/issues/3594), covering
+the reversed Sv32 part-select, remains open with no comments. Retain the
+working baseline, and check the issue status and retry newer revisions on
+the next upgrade rather than assuming these limitations remain.
 
 Test candidate revisions in an isolated checkout with their pinned
 submodules, preserving the user's working checkout. Elaborate through the
