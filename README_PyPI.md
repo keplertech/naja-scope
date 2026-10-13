@@ -212,7 +212,7 @@ Apache-2.0. See [LICENSE](https://github.com/keplertech/naja-scope/blob/main/LIC
 
 ## Optional browser schematic
 
-Requires **naja-schematic 0.1.6 or later** (the release containing the
+Requires **naja-schematic 0.2.0 or later** (the release containing the
 embeddable viewer API):
 
 ```bash

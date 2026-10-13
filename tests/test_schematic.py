@@ -39,7 +39,7 @@ def design():
 def viewer(design):
     package = pytest.importorskip("naja_schematic")
     if not hasattr(package, "ViewerServer"):
-        pytest.skip("requires naja-schematic>=0.1.6")
+        pytest.skip("requires naja-schematic>=0.2.0")
     pytest.importorskip("websockets")
     return design
 

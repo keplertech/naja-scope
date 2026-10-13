@@ -277,7 +277,7 @@ Apache-2.0. See [LICENSE](LICENSE).
 
 ## Optional browser schematic
 
-Requires **naja-schematic 0.1.6 or later** (the release containing the
+Requires **naja-schematic 0.2.0 or later** (the release containing the
 embeddable viewer API):
 
 ```bash
