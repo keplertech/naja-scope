@@ -10,7 +10,7 @@ from __future__ import annotations
 import functools
 import os
 import sys
-from typing import Annotated, Any, Callable, Dict, List, Literal, Optional
+from typing import Annotated, Any, Callable, Dict, List, Literal, Optional, Union
 
 # Allow using a local najaeda checkout without installing it.
 _najaeda_src = os.getenv("NAJAEDA_SRC")
@@ -153,6 +153,11 @@ def load_systemverilog(
         Field(description="Black-box unresolved module definitions instead "
                           "of failing elaboration."),
     ] = False,
+    blackbox_multi_writer_memories: Annotated[
+        bool,
+        Field(description="Black-box whole modules whose memories have "
+                          "unsupported multiple writers instead of failing."),
+    ] = False,
 ) -> dict:
     """Elaborate local SystemVerilog sources into the active design session.
     Use this for SystemVerilog RTL; use load_vhdl for VHDL (beta), or
@@ -162,10 +167,12 @@ def load_systemverilog(
     Anonymous lowered objects are addressable by #<id>. defines are
     preprocessor -D entries ("NAME" or "NAME=VALUE"). allow_unknown_designs=True
     blackboxes any module still undefined instead of failing (e.g. undelivered
-    hard macros in a partly-open-source design). intent=True retains naja's
-    in-engine SNL↔slang link for get_intent."""
+    hard macros in a partly-open-source design). blackbox_multi_writer_memories
+    does the same for modules whose multi-writer memories naja cannot infer.
+    intent=True retains naja's in-engine SNL↔slang link for get_intent."""
     return api.load_systemverilog(files, flist, top, keep_assigns, intent,
-                                  defines, allow_unknown_designs)
+                                  defines, allow_unknown_designs,
+                                  blackbox_multi_writer_memories)
 
 
 @_tool(annotations=SESSION_MUTATION)
@@ -182,20 +189,29 @@ def load_verilog(
         bool,
         Field(description="Black-box unresolved cell/module definitions instead of failing."),
     ] = False,
+    yosys_source_attributes: Annotated[
+        bool,
+        Field(description="Decode Yosys `(* src = ... *)` attributes into "
+                          "source origins pointing back to the RTL."),
+    ] = False,
 ) -> dict:
     """Load local gate-level or structural Verilog into the active session.
     First call load_liberty for Liberty cells or load_primitives for built-ins;
     use load_systemverilog instead for RTL elaboration. Unknown modules fail
-    unless `allow_unknown_designs` is true. Gate netlists carry no source info,
-    so get_source/get_intent cannot answer for them."""
-    return api.load_verilog(files, keep_assigns, allow_unknown_designs)
+    unless `allow_unknown_designs` is true. get_source shows the netlist
+    declaration of an object; for Yosys output, yosys_source_attributes=True
+    also records its RTL `origins` (get_source origin=N). get_intent cannot
+    answer for netlists."""
+    return api.load_verilog(files, keep_assigns, allow_unknown_designs,
+                            yosys_source_attributes)
 
 
 @_tool(annotations=SESSION_MUTATION)
 def load_vhdl(
     file: Annotated[
-        str,
-        Field(description="One local VHDL source file path (.vhd or .vhdl)."),
+        Union[str, List[str]],
+        Field(description="A local VHDL source path (.vhd/.vhdl), or a list "
+                          "of paths loaded as one batch in any order."),
     ],
     top: Annotated[
         Optional[str],
@@ -203,8 +219,10 @@ def load_vhdl(
     ] = None,
 ) -> dict:
     """Load VHDL into the active session (beta, restricted two-state RTL subset).
-    Load dependency/package files first, one call per file, then the top file.
-    Package-only files or entities awaiting generics may return top=null.
+    Prefer passing every file of the design as one list (any order; units are
+    resolved across files). Single-file calls still work: load package files
+    first, then the top. Package-only files or entities awaiting generics may
+    return top=null.
     Use hierarchy, cards and connectivity queries on the elaborated design.
     SystemVerilog intent recovery is unavailable; source ranges are not
     guaranteed. Unsupported constructs may fail during beta development.
@@ -447,20 +465,27 @@ def trace_cone(
 def get_source(
     path: Annotated[
         str,
-        Field(description="Exact hierarchical path to an object from a SystemVerilog load."),
+        Field(description="Exact hierarchical path to a loaded design object."),
     ],
     context_lines: Annotated[
         int,
         Field(description="Extra lines before and after the source range; clamped to 0..20."),
     ] = 3,
+    origin: Annotated[
+        Optional[int],
+        Field(description="Index into the object's `origins` list to read an "
+                          "upstream source (e.g. the RTL behind a Yosys "
+                          "netlist cell) instead of its declaration."),
+    ] = None,
 ) -> dict:
-    """Read the bounded SystemVerilog source excerpt that produced an object
-    (for example, an FF instance maps to its `always_ff` block). Use after
-    load_systemverilog when exact source text is needed; use get_intent for
-    typedef/enum/parameter semantics and do not use for gate-level Verilog.
+    """Read the bounded source excerpt that produced an object (for example,
+    an SV FF instance maps to its `always_ff` block; a netlist cell maps to its
+    instantiation line). Use when exact source text is needed; use get_intent
+    for typedef/enum/parameter semantics. When the response lists `origins`
+    (e.g. Yosys src attributes), call again with origin=N to read that RTL.
     Returns object, file, start/end range, text, and truncation status without
     modifying files; missing paths and source ranges return structured errors."""
-    return api.get_source(path, context_lines)
+    return api.get_source(path, context_lines, origin)
 
 
 @_tool(annotations=READ_ONLY)

@@ -85,11 +85,14 @@ def describe(resolved: Resolved, session=None) -> dict:
     src = source_ref(resolved, session)
     if src:
         out["src"] = src
+    origins = [r.to_ref() for r in source_origins(resolved)[:MAX_ORIGINS]]
+    if origins:
+        out["origins"] = origins
     return out
 
 
 def source_range(resolved: Resolved) -> Optional[SrcRange]:
-    """SrcRange for a resolved object, straight from getSourceLoc()."""
+    """SrcRange for a resolved object, straight from its SNL source refs."""
     if resolved.kind == "instance":
         loc = resolved.obj.source_loc()
     else:
@@ -100,9 +103,23 @@ def source_range(resolved: Resolved) -> Optional[SrcRange]:
 
 
 def source_ref(resolved: Resolved, session=None) -> Optional[str]:
-    """`file:start-end` for a resolved object, straight from getSourceLoc()."""
+    """`file:start-end` for a resolved object, straight from its SNL source refs."""
     rng = source_range(resolved)
     return rng.to_ref() if rng else None
+
+
+# Cap on upstream origins listed per object (a Yosys src attribute can merge
+# many RTL locations into one cell).
+MAX_ORIGINS = 8
+
+
+def source_origins(resolved: Resolved) -> List[SrcRange]:
+    """Upstream source origins (e.g. Yosys src -> RTL) beyond source_range."""
+    if resolved.kind == "instance":
+        locs = resolved.obj.source_origins()
+    else:
+        locs = snl.source_origins(resolved.obj)
+    return [SrcRange.from_loc(loc) for loc in locs]
 
 
 def _level_names(node: snl.InstNode, cap: int = _MAX_SUGGESTION_SCAN):

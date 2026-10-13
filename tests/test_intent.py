@@ -154,7 +154,7 @@ def test_unknown_package_rejected(ip):
 
 def test_api_get_intent_degrades_when_unloaded(monkeypatch):
     from naja_scope import session as sess
-    monkeypatch.setattr(sess.naja, "intent_available", lambda: False)
+    monkeypatch.setattr(sess.naja, "intentAvailable", lambda: False)
     out = api.get_intent("anything")
     assert out["intent_loaded"] is False
     assert "get_source" in out["note"]
@@ -188,7 +188,7 @@ def test_attach_intent_explicit_raises_env_swallows(monkeypatch):
     # effort), never failing the load.
     from naja_scope.session import SESSION
     from naja_scope import session as sess
-    monkeypatch.setattr(sess.naja, "intent_available", lambda: False)
+    monkeypatch.setattr(sess.naja, "intentAvailable", lambda: False)
     saved = SESSION.load_spec
     SESSION.load_spec = {}
     try:

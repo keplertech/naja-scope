@@ -17,14 +17,14 @@ import logging
 import os
 import re
 import tempfile
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from najaeda import naja
 
 from .errors import ScopeError, SVInternalError, SVSyntaxError, SVUnsupportedError
 
 # najaeda>=0.7.9 introduced these typed exceptions; naja-scope currently
-# requires najaeda>=0.7.27.
+# requires najaeda>=0.7.29.
 # directly from loadSystemVerilog; anything loaded out-of-band below that floor
 # (e.g. via NAJAEDA_SRC pointing at an older checkout) only raises plain
 # RuntimeError. Detect once so classification degrades gracefully instead of
@@ -82,7 +82,8 @@ def load_systemverilog(files: List[str], flist: Optional[str] = None,
                        top: Optional[str] = None, keep_assigns: bool = True,
                        keep_ast_link: bool = False,
                        defines: Optional[List[str]] = None,
-                       allow_unknown_designs: bool = False):
+                       allow_unknown_designs: bool = False,
+                       blackbox_multi_writer_memories: bool = False):
     db = get_top_db()
     effective_flist = flist
     temp_flist = None
@@ -108,7 +109,7 @@ def load_systemverilog(files: List[str], flist: Optional[str] = None,
             suppress_warnings=None,
             defines=defines,
             # Retain the live slang Compilation + SNL<->slang bimap for the
-            # intent layer (naja.intent_*). Off by default (the Compilation is
+            # intent layer (naja.intent*). Off by default (the Compilation is
             # GB-class on large designs); enabled only when the intent layer is
             # requested.
             keep_ast_link=keep_ast_link,
@@ -116,6 +117,9 @@ def load_systemverilog(files: List[str], flist: Optional[str] = None,
             # kwarg on both loadVerilog and loadSystemVerilog is
             # blackbox_unknown_modules (see the loadVerilog comment above).
             blackbox_unknown_modules=allow_unknown_designs,
+            # najaeda>=0.7.29: blackbox a whole module whose memory has
+            # multiple writers (unsupported) instead of failing elaboration.
+            blackbox_multi_writer_memories=blackbox_multi_writer_memories,
         )
     except RuntimeError as e:
         raise _classify_sv_load_error(e) from e
@@ -125,7 +129,8 @@ def load_systemverilog(files: List[str], flist: Optional[str] = None,
 
 
 def load_verilog(files: List[str], keep_assigns: bool = True,
-                 allow_unknown_designs: bool = False):
+                 allow_unknown_designs: bool = False,
+                 yosys_source_attributes: bool = False):
     # najaeda>=0.7.11 renamed the raw NLDB.loadVerilog kwarg from
     # allow_unknown_designs to blackbox_unknown_modules; naja-scope's own
     # public parameter name is kept stable across that rename.
@@ -135,24 +140,32 @@ def load_verilog(files: List[str], keep_assigns: bool = True,
         blackbox_unknown_modules=allow_unknown_designs,
         preprocess_enabled=False,
         conflicting_design_name_policy="forbid",
+        # najaeda>=0.7.29: decode Yosys `(* src = ... *)` attributes into
+        # source origins, cross-probing netlist objects back to the RTL.
+        yosys_source_attributes=yosys_source_attributes,
     )
 
 
-def load_vhdl(file: str, top: Optional[str] = None):
-    """Load one VHDL source through the raw beta frontend.
+def load_vhdl(file: Union[str, List[str]], top: Optional[str] = None):
+    """Load one VHDL source, or a batch, through the raw beta frontend.
 
-    Package-only files and entities awaiting generic values may return None.
-    Disable the default diagnostics file; diagnostics still go to stderr.
+    A batch (najaeda>=0.7.29) may list files in any order: units are resolved,
+    not merely sorted. Package-only files and entities awaiting generic values
+    may return None. Disable the default diagnostics file; diagnostics still go
+    to stderr.
     """
-    if not file or not os.path.isfile(file):
-        raise ScopeError(f"VHDL source file not found: {file}")
+    files = [file] if isinstance(file, str) else list(file or [])
+    if not files:
+        raise ScopeError("No VHDL source files provided.")
+    for path in files:
+        if not path or not os.path.isfile(path):
+            raise ScopeError(f"VHDL source file not found: {path}")
     if top == "":
         raise ScopeError("VHDL top must not be empty; omit it to infer the top.")
     db = get_top_db()
-    if not hasattr(db, "loadVHDL"):
-        raise ScopeError("VHDL loading requires najaeda>=0.7.25.")
     try:
-        return db.loadVHDL(file, top=top, diagnostics_report_path=None)
+        return db.loadVHDL(files if len(files) > 1 else files[0], top=top,
+                           diagnostics_report_path=None)
     except RuntimeError as exc:
         raise ScopeError(f"VHDL beta loading failed: {exc}") from exc
 

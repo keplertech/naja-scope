@@ -169,8 +169,10 @@ way as RTL:
 > `data_out`."*
 
 Hierarchy, per-cell counts (`get_module_card`), drivers/loads, and logic cones
-all work on the netlist; cones stop at the sequential cells. A gate netlist
-carries no source line info, so `get_source` applies to RTL only. A runnable
+all work on the netlist; cones stop at the sequential cells. `get_source`
+shows a cell's or net's line in the netlist. For Yosys output, load with
+`yosys_source_attributes=True`: the `(* src = ... *)` attributes become
+`origins` that `get_source(path, origin=0)` reads back in the RTL. A runnable
 example lives in [`examples/`](examples/) (`stdcells.lib` + `counter2.v` +
 `gate_level.py`).
 
@@ -178,11 +180,11 @@ example lives in [`examples/`](examples/) (`stdcells.lib` + `counter2.v` +
 
 ## VHDL (beta)
 
-VHDL loading is available in beta with najaeda 0.7.25 or newer. Call
-`load_vhdl(file="/path/to/design.vhd", top="my_entity")` to explore its
-elaborated hierarchy and connectivity. Load dependencies/packages first,
-one file per call; package-only files may return `top: null` until the top
-file is loaded. The frontend supports a restricted two-state RTL subset,
+VHDL loading is available in beta. Call
+`load_vhdl(file=["pkg.vhd", "child.vhd", "top.vhd"], top="my_entity")` to
+explore its elaborated hierarchy and connectivity; the files may be listed in
+any order. A single path per call also works (load packages first);
+package-only files may return `top: null` until the top file is loaded. The frontend supports a restricted two-state RTL subset,
 and supported constructs may change. `get_intent`/`load_intent` remain
 SystemVerilog-only; VHDL source ranges are not guaranteed.
 

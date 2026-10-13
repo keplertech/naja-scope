@@ -10,7 +10,7 @@ is the natural substrate for the slang-AST coupling behind the intent layer.
 This module centralises every raw-SNL primitive the tools need:
 
 * universe / top / design enumeration,
-* source locations (getSourceLoc),
+* source locations (getSourceDeclaration / getSourceOrigins / getSourceLoc),
 * `InstNode` — a hierarchical instance occurrence carrying both a name-path
   (for display) and an `SNLPath` (for occurrence/equipotential construction),
 * term/net bit handling,
@@ -98,24 +98,68 @@ def suggest_designs(name: str, n: int = 8) -> List[str]:
 
 # -- source locations --------------------------------------------------------
 
-def source_loc(obj) -> Optional[Tuple[str, int, int, int, int]]:
-    """Normalised (file, line, end_line, column, end_column), or None.
+Loc = Tuple[str, int, int, int, int]
 
-    The raw getSourceLoc tuple is (file, line, column, end_line, end_column);
-    we reorder so the line span leads, matching SrcRange.
-    """
+
+def _norm(raw) -> Optional[Loc]:
+    """Raw (file, line, column, end_line, end_column) -> normalised Loc.
+
+    We reorder so the line span leads, matching SrcRange."""
+    if not raw or not raw[0]:
+        return None
+    file, line, column, end_line, end_column = raw
+    return (file, line, end_line, column, end_column)
+
+
+def _source_refs(obj) -> Tuple[Optional[Loc], List[Loc]]:
+    """(declaration, origins) from najaeda>=0.7.29's language-neutral source
+    references. Each raw reference is ((file, line, col, end_line, end_col),
+    provider, language, representation)."""
+    if obj is None or not hasattr(obj, "getSourceDeclaration"):
+        return None, []
+    try:
+        decl = obj.getSourceDeclaration()
+        origins = obj.getSourceOrigins()
+    except Exception:
+        return None, []
+    decl_loc = _norm(decl[0]) if decl else None
+    origin_locs = [loc for loc in (_norm(o[0]) for o in origins or []) if loc]
+    return decl_loc, origin_locs
+
+
+def _legacy_loc(obj) -> Optional[Loc]:
     if obj is None or not hasattr(obj, "hasSourceLoc"):
         return None
     try:
         if not obj.hasSourceLoc():
             return None
-        loc = obj.getSourceLoc()
+        return _norm(obj.getSourceLoc())
     except Exception:
         return None
-    if not loc:
-        return None
-    file, line, column, end_line, end_column = loc
-    return (file, line, end_line, column, end_column)
+
+
+def source_loc(obj) -> Optional[Loc]:
+    """Normalised (file, line, end_line, column, end_column), or None.
+
+    Prefers the source declaration (populated for SystemVerilog *and*
+    gate-level Verilog netlists), then the legacy getSourceLoc, then the first
+    source origin (SV cells inferred from a process carry only an origin).
+    """
+    decl, origins = _source_refs(obj)
+    return decl or _legacy_loc(obj) or (origins[0] if origins else None)
+
+
+def source_origins(obj) -> List[Loc]:
+    """Upstream source origins beyond source_loc(obj) — e.g. the RTL lines a
+    Yosys `(* src = ... *)` attribute points back to from a synthesized
+    netlist (load_verilog with yosys_source_attributes=True)."""
+    _decl, origins = _source_refs(obj)
+    primary = source_loc(obj)
+    out: List[Loc] = []
+    for loc in origins:
+        if loc != primary and loc not in out:
+            out.append(loc)
+    return out
 
 
 def direction_str(direction) -> str:
@@ -262,6 +306,9 @@ class InstNode:
 
     def source_loc(self):
         return source_loc(self.snl_instance if not self.is_top else self.design)
+
+    def source_origins(self):
+        return source_origins(self.snl_instance if not self.is_top else self.design)
 
 
 def top_node() -> InstNode:
