@@ -3,15 +3,15 @@
 
 Recovers the source-level facts erased by SystemVerilog lowering — enum/FSM state
 names + encodings, declared type names, and symbolic parameter expressions — by
-calling naja's curated intent API (`naja.intent_type_of` / `intent_parameters_of`
-/ `intent_package_member`). Those walk the live slang AST *in C++*, over the
+calling naja's curated intent API (`naja.intentTypeOf` / `intentParametersOf`
+/ `intentPackageMember`). Those walk the live slang AST *in C++*, over the
 SNL↔slang bimap naja built at lowering time (`keep_ast_link=True`), and return
 plain Python data. There is NO pyslang here and no second elaboration: naja owns
 the one AST and answers in dicts.
 
 Warm-only (the slang Compilation never serializes): the link exists only while it
 is alive in-process — i.e. after a SystemVerilog load with
-`keep_ast_link`. `naja.intent_available()` reports it. A cold snapshot load has no
+`keep_ast_link`. `naja.intentAvailable()` reports it. A cold snapshot load has no
 Compilation, so intent degrades to "not loaded" until a warm (re)load; the exact
 relink-after-snapshot tier is deferred.
 
@@ -19,7 +19,7 @@ Resolution rides naja-scope's structural resolver: a ref is resolved to its SNL
 object (`resolve.py`), then handed to `naja.intent_*`. This is why anonymous
 lowered primitives (`#<id>`) now answer — they resolve to the FF instance, which
 the bimap maps back to its declaring source symbol. Package members (`pkg::name`)
-have no SNL object and go through the name-keyed `naja.intent_package_member`.
+have no SNL object and go through the name-keyed `naja.intentPackageMember`.
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class IntentProvider:
     structural ref→object resolution.
 
     Stateless beyond the session handle: the live AST is owned by naja (kept
-    alive by `keep_ast_link`), so "loaded" is simply `naja.intent_available()`.
+    alive by `keep_ast_link`), so "loaded" is simply `naja.intentAvailable()`.
     Plugs into Session as the IntentProvider seam.
     """
 
@@ -69,7 +69,7 @@ class IntentProvider:
 
     @property
     def loaded(self) -> bool:
-        return bool(naja.intent_available())
+        return bool(naja.intentAvailable())
 
     # -- public queries ------------------------------------------------------
 
@@ -78,7 +78,7 @@ class IntentProvider:
         if "::" in ref:
             return self._package_record(ref)
         resolved = resolve_path(self.session, ref)[0]
-        rec = naja.intent_type_of(self._intent_obj(resolved))
+        rec = naja.intentTypeOf(self._intent_obj(resolved))
         if rec is None:
             return {"ref": ref, "label": resolved.path.split(".")[-1],
                     "note": (f"no source type recovered for {ref} (non-enum "
@@ -98,7 +98,7 @@ class IntentProvider:
     def get_parameters(self, ref: str, symbolic: bool = True) -> dict:
         """Parameters + localparams of an instance/module, with their SYMBOLIC
         initializer text (lost in lowering) alongside the elaborated value."""
-        rec = naja.intent_parameters_of(self._resolve_instance_obj(ref))
+        rec = naja.intentParametersOf(self._resolve_instance_obj(ref))
         if rec is None:
             raise ScopeError(
                 f"{ref!r}: no parameters recovered (not an instance/module with "
@@ -121,7 +121,7 @@ class IntentProvider:
     # -- resolution helpers --------------------------------------------------
 
     def _intent_obj(self, resolved):
-        """The SNL object to hand to naja.intent_type_of for a resolved ref:
+        """The SNL object to hand to naja.intentTypeOf for a resolved ref:
         the raw net/term, or — for an instance — its SNLInstance (top: design)."""
         if resolved.kind == "instance":
             node = resolved.obj
@@ -145,7 +145,7 @@ class IntentProvider:
         """A package member (pkg::name) — name-keyed over the live compilation,
         since packages are not instantiated and have no SNL object."""
         pkg, _, member = ref.partition("::")
-        rec = naja.intent_package_member(pkg, member)
+        rec = naja.intentPackageMember(pkg, member)
         if rec is None:
             raise ScopeError(
                 f"intent: {member!r} not found in package {pkg!r} (or the intent "

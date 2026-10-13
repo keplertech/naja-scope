@@ -155,18 +155,19 @@ way as RTL:
 > `data_out`."*
 
 Hierarchy, per-cell counts, drivers/loads, and logic cones all work on the
-netlist; cones stop at the sequential cells. (A gate netlist carries no source
-line info, so `get_source` applies to RTL only.)
+netlist; cones stop at the sequential cells. `get_source` shows an object's
+line in the netlist, and for Yosys output `yosys_source_attributes=True` adds
+`origins` that `get_source(path, origin=0)` reads back in the RTL.
 
 ---
 
 ## VHDL (beta)
 
-VHDL loading is available in beta with najaeda 0.7.25 or newer. Call
-`load_vhdl(file="/path/to/design.vhd", top="my_entity")` to explore its
-elaborated hierarchy and connectivity. Load dependencies/packages first,
-one file per call; package-only files may return `top: null` until the top
-file is loaded. The frontend supports a restricted two-state RTL subset,
+VHDL loading is available in beta. Call
+`load_vhdl(file=["pkg.vhd", "child.vhd", "top.vhd"], top="my_entity")` to
+explore its elaborated hierarchy and connectivity; the files may be listed in
+any order. A single path per call also works (load packages first);
+package-only files may return `top: null` until the top file is loaded. The frontend supports a restricted two-state RTL subset,
 and supported constructs may change. `get_intent`/`load_intent` remain
 SystemVerilog-only; VHDL source ranges are not guaranteed.
 
@@ -211,7 +212,7 @@ Apache-2.0. See [LICENSE](https://github.com/keplertech/naja-scope/blob/main/LIC
 
 ## Optional browser schematic
 
-Requires **naja-schematic 0.1.6 or later** (the release containing the
+Requires **naja-schematic 0.2.0 or later** (the release containing the
 embeddable viewer API):
 
 ```bash

@@ -7,8 +7,8 @@ port / black-box barriers, crossing hierarchy and following combinatorial arcs
 only. naja-scope no longer hand-rolls the equipotential BFS; it seeds the cone,
 then turns the DAG into a token-bounded summary:
 
-* `get_node_count()` / `get_nodes()` kinds  -> size + counts_by_kind,
-* `get_leaves()`                            -> the stop-at-flops frontier
+* `getNodeCount()` / `getNodes()` kinds  -> size + counts_by_kind,
+* `getLeaves()`                             -> the stop-at-flops frontier
   (flops, top ports, opaque black boxes), categorised and bounded,
 * the flop frontier grouped by top-level submodule, naming the registers that
   lie OUTSIDE the cone root's own subtree -> the cross-hierarchy answer.
@@ -40,7 +40,7 @@ _DIRECTIONS = {
     "fanin": naja.LogicCone.FanIn,
     "fanout": naja.LogicCone.FanOut,
 }
-# get_leaves() kinds that are barriers, by category.
+# getLeaves() kinds that are barriers, by category.
 _LEAF_KINDS = {"flop", "ports", "blackbox"}
 
 
@@ -149,10 +149,10 @@ def trace_cone(resolved: Resolved, session, direction: str,
         if occ is None:
             continue
         cone = naja.LogicCone(occ, cone_dir)
-        node_count += cone.get_node_count()
-        for (_id, _occ, kind, _nx, _pv) in cone.get_nodes():
+        node_count += cone.getNodeCount()
+        for (_id, _occ, kind, _nx, _pv) in cone.getNodes():
             counts_by_kind[kind] = counts_by_kind.get(kind, 0) + 1
-        for (_id, leaf_occ, kind, _nx, _pv) in cone.get_leaves():
+        for (_id, leaf_occ, kind, _nx, _pv) in cone.getLeaves():
             if kind == "ports":
                 nc = leaf_occ.getNetComponent()
                 if nc is None:

@@ -107,9 +107,16 @@ def main():
     print(f"  nodes in cone     : {cone['node_count']}")
     print(f"  register frontier : {frontier['flop_count']} flop(s), "
           f"{frontier['blackbox_count']} black box(es)")
-    assert cone["node_count"] > 100_000, (
-        "expected a large cone spanning most of the core's combinational logic")
+    homes = sorted({".".join(f["path"].split(".")[:3]) for f in frontier["flops"]})
+    print(f"  frontier lives in : {homes}")
+    # The request is registered inside the AXI adapter: its I/D-cache data
+    # FIFOs are not fall-through, so the true fan-in stops at the adapter's
+    # FIFO storage and state registers. najaeda <=0.7.27 over-approximated
+    # this, running through the FIFOs into the caches (~2.5M nodes).
     assert frontier["flop_count"] > 0, "expected a non-trivial register frontier"
+    assert frontier["blackbox_count"] == 0, "cone should fully traverse combinational logic"
+    assert all("i_adapter" in f["path"] for f in frontier["flops"]), (
+        "expected noc_req_o to be registered inside the AXI adapter")
 
     print("\nDone. A handful of small, exact calls answered structural, "
           "connectivity and cross-hierarchy questions on a real RISC-V core "

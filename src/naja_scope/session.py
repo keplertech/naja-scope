@@ -9,7 +9,7 @@ optional intent provider plugs in next to it without touching tool handlers.
 from __future__ import annotations
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from najaeda import naja
 
@@ -71,34 +71,39 @@ class Session:
                            keep_assigns: bool = True,
                            keep_ast_link: bool = False,
                            defines: Optional[List[str]] = None,
-                           allow_unknown_designs: bool = False) -> "snl.InstNode":
+                           allow_unknown_designs: bool = False,
+                           blackbox_multi_writer_memories: bool = False) -> "snl.InstNode":
         loader.load_systemverilog(files, flist=flist, top=top,
                                   keep_assigns=keep_assigns,
                                   keep_ast_link=keep_ast_link,
                                   defines=defines,
-                                  allow_unknown_designs=allow_unknown_designs)
+                                  allow_unknown_designs=allow_unknown_designs,
+                                  blackbox_multi_writer_memories=blackbox_multi_writer_memories)
         self._record_sources(files)
         if flist:
             self._record_sources([flist])
         self.load_spec = {"files": list(files or []), "flist": flist,
                           "top": top, "defines": defines,
-                          "allow_unknown_designs": allow_unknown_designs}
+                          "allow_unknown_designs": allow_unknown_designs,
+                          "blackbox_multi_writer_memories": blackbox_multi_writer_memories}
         return snl.top_node()
 
     @design_mutation
     def load_verilog(self, files: List[str], keep_assigns: bool = True,
-                     allow_unknown_designs: bool = False) -> "snl.InstNode":
+                     allow_unknown_designs: bool = False,
+                     yosys_source_attributes: bool = False) -> "snl.InstNode":
         loader.load_verilog(files, keep_assigns=keep_assigns,
-                            allow_unknown_designs=allow_unknown_designs)
+                            allow_unknown_designs=allow_unknown_designs,
+                            yosys_source_attributes=yosys_source_attributes)
         self._record_sources(files)
         self.load_spec = {"files": list(files or []), "flist": None,
                           "top": None}
         return snl.top_node()
 
     @design_mutation
-    def load_vhdl(self, file: str, top: Optional[str] = None):
+    def load_vhdl(self, file: Union[str, List[str]], top: Optional[str] = None):
         design = loader.load_vhdl(file, top=top)
-        self._record_sources([file])
+        self._record_sources([file] if isinstance(file, str) else list(file))
         self.load_spec = {"language": "vhdl", "files": list(self.loaded_files),
                           "top": top}
         return snl.top_node() if design is not None else None
@@ -122,7 +127,7 @@ class Session:
         if self.load_spec.get("language") == "vhdl":
             raise ScopeError("The intent layer is SystemVerilog-only; "
                              "VHDL beta sessions do not support load_intent.")
-        if naja.intent_available():
+        if naja.intentAvailable():
             return self.intent
         spec = self.load_spec or {}
         files = files if files is not None else spec.get("files")
@@ -130,6 +135,8 @@ class Session:
         top = top if top is not None else spec.get("top")
         defines = spec.get("defines")
         allow_unknown_designs = spec.get("allow_unknown_designs", False)
+        blackbox_multi_writer_memories = spec.get(
+            "blackbox_multi_writer_memories", False)
         if not files and not flist:
             raise ScopeError(
                 "load_intent needs a flist or files to elaborate the intent "
@@ -143,12 +150,13 @@ class Session:
         self.__init__()
         self.load_systemverilog(files or [], flist=flist, top=top,
                                 keep_ast_link=True, defines=defines,
-                                allow_unknown_designs=allow_unknown_designs)
+                                allow_unknown_designs=allow_unknown_designs,
+                                blackbox_multi_writer_memories=blackbox_multi_writer_memories)
         return self.intent
 
     @property
     def intent_available(self) -> bool:
-        return bool(naja.intent_available())
+        return bool(naja.intentAvailable())
 
     # -- source resolution ---------------------------------------------------
 

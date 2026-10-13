@@ -20,9 +20,12 @@ def _server():
         try:
             from naja_schematic import ViewerServer
         except ImportError as exc:
-            raise ScopeError('Schematic tools require naja-schematic>=0.1.6; '
+            raise ScopeError('Schematic tools require naja-schematic>=0.2.0; '
                              'install "naja-scope[schematic]".') from exc
-        viewer = ViewerServer(lock=DESIGN_LOCK)
+        # naja-schematic>=0.2 resolves relative source references (Show
+        # Sources) against these roots; they are fixed at viewer creation.
+        viewer = ViewerServer(lock=DESIGN_LOCK,
+                              source_roots=tuple(SESSION.source_dirs))
         try:
             viewer.start()
         except (OSError, RuntimeError) as exc:

@@ -85,11 +85,13 @@ def main():
     print(f"  flattened leaf gates    : {root['flat_leaves']:,}")
     print(f"  sequential instances    : {root['flat_sequential']:,}")
     print(f"  distinct model variants : {stats['total_models']}")
-    # Revalidated on the pinned CORE-V-MCU commit with najaeda 0.7.27.
-    # Its wildcard-case sequential lowering changes the CSR implementation:
-    # 0.7.25 produced 722,402 leaves / 97,376 sequential instances. These
-    # count native instances, including word-wide cells, rather than RTL bits.
-    assert root["flat_leaves"] == 634_875, "elaborated leaf count drifted"
+    # Revalidated on the pinned CORE-V-MCU commit with najaeda 0.7.29, whose
+    # combinational lowering yields 631,603 leaves (634,875 with 0.7.27;
+    # sequential and model counts unchanged). 0.7.27's wildcard-case
+    # sequential lowering had changed the CSR implementation: 0.7.25 produced
+    # 722,402 leaves / 97,376 sequential instances. These count native
+    # instances, including word-wide cells, rather than RTL bits.
+    assert root["flat_leaves"] == 631_603, "elaborated leaf count drifted"
     assert root["flat_sequential"] == 6_501, "sequential instance count drifted"
     assert stats["total_models"] == 320, "elaborated model count drifted"
 

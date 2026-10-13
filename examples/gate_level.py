@@ -14,8 +14,9 @@ It loads examples/stdcells.lib (the cell library) then examples/counter2.v (a
 tests/test_examples_gate_level.py asserts these same answers, so this tour
 can't silently drift from how the tools actually behave.
 
-Note: a gate netlist carries no SystemVerilog source info, so get_source has
-nothing to point at here — gate-level is about structure and connectivity.
+Note: get_source on a gate netlist points at the object's line in the .v
+file; for Yosys output, load_verilog(..., yosys_source_attributes=True) also
+exposes the RTL lines behind each cell as `origins`.
 """
 
 import os

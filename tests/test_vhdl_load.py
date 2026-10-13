@@ -60,6 +60,39 @@ def test_package_then_top(tmp_path, vhdl_file):
     assert api.status()["loaded_files"] == [str(package), vhdl_file]
 
 
+def test_batch_files_any_order(tmp_path):
+    child = tmp_path / "child.vhd"
+    child.write_text("""
+library ieee;
+use ieee.std_logic_1164.all;
+entity child is
+  port (a : in std_logic; y : out std_logic);
+end entity;
+architecture rtl of child is
+begin
+  y <= a;
+end architecture;
+""")
+    top = tmp_path / "top.vhd"
+    top.write_text("""
+library ieee;
+use ieee.std_logic_1164.all;
+entity top is
+  port (a : in std_logic; y : out std_logic);
+end entity;
+architecture rtl of top is
+begin
+  u : entity work.child port map (a => a, y => y);
+end architecture;
+""")
+    # The top's user precedes the child's definition: units are resolved.
+    with pytest.warns(RuntimeWarning, match="Beta"):
+        result = api.load_vhdl([str(top), str(child)])
+    assert result["top"]["model"] == "top"
+    assert api.resolve("top.u")["matches"][0]["model"] == "child"
+    assert api.status()["loaded_files"] == [str(top), str(child)]
+
+
 def test_snapshot_preserves_vhdl_intent_guard(tmp_path, vhdl_file, monkeypatch):
     with pytest.warns(RuntimeWarning, match="Beta"):
         api.load_vhdl(vhdl_file)

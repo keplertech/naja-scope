@@ -8,7 +8,7 @@ import contextlib
 import fnmatch
 import io
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from najaeda import naja
 
@@ -19,8 +19,8 @@ from . import loader
 from . import snl
 from .errors import ScopeError
 from .paging import clamp_limit, paginate
-from .resolve import (Resolved, describe, resolve_path, source_range,
-                      source_ref)
+from .resolve import (MAX_ORIGINS, Resolved, describe, resolve_path,
+                      source_origins, source_range, source_ref)
 from .session import SESSION
 from .runtime import serialized, design_mutation
 
@@ -102,7 +102,8 @@ def load_systemverilog(files: Optional[List[str]] = None,
                        keep_assigns: bool = True,
                        intent: bool = False,
                        defines: Optional[List[str]] = None,
-                       allow_unknown_designs: bool = False) -> dict:
+                       allow_unknown_designs: bool = False,
+                       blackbox_multi_writer_memories: bool = False) -> dict:
     # Warm load: retain the slang AST link inline (keep_ast_link) when intent is
     # requested — no separate elaboration step. Off by default (the Compilation
     # is GB-class on large designs).
@@ -112,7 +113,8 @@ def load_systemverilog(files: Optional[List[str]] = None,
                                               keep_assigns=keep_assigns,
                                               keep_ast_link=want,
                                               defines=defines,
-                                              allow_unknown_designs=allow_unknown_designs)
+                                              allow_unknown_designs=allow_unknown_designs,
+                                              blackbox_multi_writer_memories=blackbox_multi_writer_memories)
     out = {"top": _summary(top_instance)}
     if want:
         out["intent_loaded"] = SESSION.intent_available
@@ -136,16 +138,18 @@ def load_intent(flist: Optional[str] = None, files: Optional[List[str]] = None,
 
 @serialized
 def load_verilog(files: List[str], keep_assigns: bool = True,
-                 allow_unknown_designs: bool = False) -> dict:
+                 allow_unknown_designs: bool = False,
+                 yosys_source_attributes: bool = False) -> dict:
     top_instance = SESSION.load_verilog(
         files, keep_assigns=keep_assigns,
-        allow_unknown_designs=allow_unknown_designs)
+        allow_unknown_designs=allow_unknown_designs,
+        yosys_source_attributes=yosys_source_attributes)
     return {"top": _summary(top_instance)}
 
 
 @serialized
-def load_vhdl(file: str, top: Optional[str] = None) -> dict:
-    """Load a single VHDL file using najaeda's beta frontend."""
+def load_vhdl(file: Union[str, List[str]], top: Optional[str] = None) -> dict:
+    """Load one VHDL file, or a batch in any order, with najaeda's beta frontend."""
     node = SESSION.load_vhdl(file, top=top)
     out = {"top": _summary(node) if node is not None else None,
            "language": "vhdl", "beta": True, "intent_loaded": False}
@@ -349,21 +353,32 @@ def trace_cone(path: str, direction: str,
 # -- source -----------------------------------------------------------------------
 
 @serialized
-def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT) -> dict:
+def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT,
+               origin: Optional[int] = None) -> dict:
     context_lines = max(0, min(context_lines, 20))
     matches = resolve_path(SESSION, path)
     resolved = matches[0]
     rng = source_range(resolved)
+    origins = source_origins(resolved)[:MAX_ORIGINS]
+    extra = {"origins": [r.to_ref() for r in origins]} if origins else {}
+    if origin is not None:
+        if not 0 <= origin < len(origins):
+            return {"object": resolved.path, **extra,
+                    "error": f"No source origin #{origin} for this object "
+                             f"({len(origins)} known)."}
+        rng = origins[origin]
+        extra["origin"] = origin
     if rng is None:
         return {
             "object": resolved.path,
             "error": "No source range known for this object.",
-            "hint": ("Source ranges come from SystemVerilog loading; "
-                     "gate-level Verilog without source info has none."),
+            "hint": ("Source ranges come from SystemVerilog loading and "
+                     "Verilog netlists; VHDL beta objects and synthesized "
+                     "anonymous objects may have none."),
         }
     file_path = SESSION.find_source_file(rng.file)
     if file_path is None:
-        return {"object": resolved.path, "src": rng.to_ref(),
+        return {"object": resolved.path, "src": rng.to_ref(), **extra,
                 "error": f"Source file not found: {rng.file}"}
     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
@@ -375,7 +390,7 @@ def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT) -> dict:
     # etc.) are visible in one call. Stops at a blank line, and does nothing when
     # the type is referenced (e.g. a package typedef `riscv::priv_lvl_t x;`) with
     # no block above — exactly the case that needs the intent layer.
-    if resolved.kind in ("net", "term"):
+    if resolved.kind in ("net", "term") and origin is None:
         lo = max(1, rng.line - _DECL_MAX_UP)
         probe = rng.line
         while probe > lo:
@@ -401,6 +416,7 @@ def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT) -> dict:
         "start": start,
         "end": end,
         "src": rng.to_ref(),
+        **extra,
         "text": "".join(selected),
         "truncated": truncated,
     }
