@@ -178,8 +178,9 @@ It shows:
   stage entirely, into `csr_regfile_i` (the privilege-level register gates
   the divider) — a fact no textual grep of `serdiv.sv` could ever reveal.
 - **A whole-port fan-in cone** — `trace_cone` on the top-level output
-  `noc_req_o` (470 bits) traces all 2.8M nodes of combinational logic behind
-  it in one call, ~2.5 minutes.
+  `noc_req_o` (470 bits) shows that the whole request is registered inside
+  the cache subsystem's AXI adapter: the cone stops at the adapter's FIFO
+  storage and state registers, without reaching back into the caches.
 
 This is the same tour that runs in CI as a regression
 (`.github/workflows/cva6-demo.yml`) — MCP-only, no agent, so it's
