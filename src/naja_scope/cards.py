@@ -34,7 +34,7 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Optional
 
-from . import snl
+from . import snl, storage
 from .errors import ScopeError
 from .session import Session
 from .source_index import SrcRange
@@ -115,10 +115,7 @@ def _model_is_sequential(model) -> bool:
 
 def _model_role_facts(model) -> dict:
     """Primitive pin-role facts for a leaf model (SNLDesign.getClockTerms()
-    etc.), sound (not name-guessed) but only populated for primitives
-    elaborated from RTL via slang -- empty for hierarchical models and for
-    primitives sourced from yosys/xilinx/liberty (role porting there is
-    upstream WIP as of najaeda 0.7.12)."""
+    etc.), sound (not name-guessed) for modeled RTL and library primitives."""
     facts = {}
     try:
         if list(model.getAsyncResetTerms()):
@@ -156,9 +153,14 @@ def module_card(session: Session, module: str,
         count, with `by_model_truncated` if elided). Hard fact --
         sequential_with_(a)sync_* comes from each leaf model's own
         SNLDesign.get(A)SyncResetTerms()/get(A)SyncSetTerms() (sound, primitive
-        pin roles), not name matching. Only populated for primitives
-        elaborated from RTL via slang; 0 for gate-level netlists sourced from
-        yosys/xilinx/liberty until that role porting lands upstream.
+        pin roles), not name matching.
+      - Storage counts describe direct children: register_bits counts modeled
+        flip-flop/latch states (not Q/QN outputs), excluding memories.
+        register_bits_unknown_instances counts sequential non-memory cells
+        without a state model. memory_bits is width * depth for native DB0
+        RAM/ROM primitives. `memories` lists at most max_models such children,
+        with initialization previews capped at 64 characters; address zero is
+        the least-significant word of INIT.
       - `parameters`: name/value pairs, when present. Hard fact.
       - `src`: the module's source range as `file:start-end`, when known.
       - `clock_candidates` / `reset_candidates` (+ `active_low_guess`):
@@ -172,6 +174,9 @@ def module_card(session: Session, module: str,
 
     by_model: Dict[str, int] = {}
     role_facts_by_model: Dict[str, dict] = {}
+    storage_counts = storage.empty_counts()
+    sequential_models = {}
+    memories = []
     total = 0
     sequential = 0
     sequential_with_async_reset = 0
@@ -180,6 +185,9 @@ def module_card(session: Session, module: str,
     sequential_with_sync_set = 0
     for inst in design.getInstances():
         total += 1
+        memory = storage.add_instance(storage_counts, inst, sequential_models)
+        if memory is not None and len(memories) < max_models:
+            memories.append(memory)
         model = inst.getModel()
         model_name = model.getName()
         by_model[model_name] = by_model.get(model_name, 0) + 1
@@ -199,6 +207,7 @@ def module_card(session: Session, module: str,
 
     top_models = sorted(by_model.items(), key=lambda kv: -kv[1])
     counts = {
+        **storage_counts,
         "instances": total,
         "sequential_instances": sequential,
         "sequential_with_async_reset": sequential_with_async_reset,
@@ -229,6 +238,8 @@ def module_card(session: Session, module: str,
         "module": module,
         "ports": ports,
         "counts": counts,
+        "memories": memories,
+        "memories_truncated": storage_counts["memory_instances"] > len(memories),
         "clock_candidates": clocks,
         "reset_candidates": resets,
         "heuristic_fields": ["clock_candidates", "reset_candidates"],

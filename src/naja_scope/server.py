@@ -496,8 +496,9 @@ def get_module_card(
     ],
 ) -> dict:
     """Deterministic module summary: ports, instance counts by model,
-    sequential count, source ref, plus clock/reset candidates — a name-based
-    regex guess, not a structural result; verify before relying on it. Use this
+    sequential cell and register-bit counts, bounded RAM/ROM details (width,
+    depth, ports, initialization preview), and source ref. Clock/reset candidates
+    are name-based guesses; verify before relying on them. Use this
     for one model's interface; use get_stats for counts below an instance."""
     return api.get_module_card(module)
 
@@ -519,10 +520,13 @@ def get_stats(
     ] = None,
 ) -> dict:
     """Summarize instance population by model below `path` or the top design.
-    Use this for aggregate leaf/sequential/model counts; use get_hierarchy for
-    actual child instances or get_module_card for one model's ports. This
+    Use this for aggregate leaf/sequential/model counts, register bits, and
+    RAM/ROM counts and capacity; use get_hierarchy for actual child instances
+    or get_module_card for one model's ports. This
     read-only query requires a loaded design. Returns `root_model`, flat totals,
-    a paginated `models` list, `total_models`, `has_more`, and `next_cursor`."""
+    a paginated `models` list, `total_models`, `has_more`, and `next_cursor`.
+    Register bits count modeled flip-flop/latch states, excluding memories;
+    unknown sequential bit counts are reported separately."""
     return api.get_stats(path, limit, cursor)
 
 

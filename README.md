@@ -178,6 +178,24 @@ example lives in [`examples/`](examples/) (`stdcells.lib` + `counter2.v` +
 
 ---
 
+## Storage summaries
+
+`get_module_card` reports direct-child register bits and inferred RAM/ROM
+summaries: width, depth, capacity in bits, read/write port counts, and
+initialization status. It lists up to 12 memories, with `memories_truncated`
+when more exist; initialized memories include a 64-character `init_preview`
+and `init_truncated`. Address zero occupies the least-significant word.
+
+`get_stats` aggregates these counts below the selected instance using
+`flat_register_bits`, `flat_memory_instances`, `flat_rom_instances`,
+`flat_ram_instances`, and `flat_memory_bits`. Register bits count modeled
+flip-flop/latch states, including multibit Liberty banks; RAM capacity is
+separate. Sequential cells without a state model are counted in
+`register_bits_unknown_instances` (`flat_` in statistics), so known bit
+counts remain explicit lower bounds when that count is nonzero. Memories
+are recognized from native naja primitives; opaque memory macros are not
+assigned an inferred capacity.
+
 ## VHDL (beta)
 
 VHDL loading is available in beta. Call
