@@ -16,7 +16,7 @@ from . import cards as cards_mod
 from . import cone as cone_mod
 from . import connectivity
 from . import loader
-from . import snl
+from . import snl, storage
 from .errors import ScopeError
 from .paging import clamp_limit, paginate
 from .resolve import (MAX_ORIGINS, Resolved, describe, resolve_path,
@@ -440,11 +440,11 @@ def _safe_seq(model) -> bool:
         return False
 
 
-def _collect_model_stats(design, memo: dict) -> dict:
+def _collect_model_stats(design, memo: dict, sequential_models: dict) -> dict:
     """Hierarchical stats memoized per model. Deliberately avoids
     najaeda.stats: its is_basic_primitive crashes the process on multi-output
     primitives like naja_fa."""
-    model_id = design.getID()
+    model_id = storage.model_key(design)
     if model_id in memo:
         return memo[model_id]
     entry = {
@@ -454,6 +454,7 @@ def _collect_model_stats(design, memo: dict) -> dict:
         "children_by_model": {},
         "flat_leaves": 0,
         "flat_sequential": 0,
+        **{"flat_" + field: 0 for field in storage.COUNT_FIELDS},
     }
     memo[model_id] = entry
     for child in design.getInstances():
@@ -465,15 +466,21 @@ def _collect_model_stats(design, memo: dict) -> dict:
             entry["leaf_by_model"][name] = (
                 entry["leaf_by_model"].get(name, 0) + 1)
             entry["flat_leaves"] += 1
+            counts = storage.empty_counts()
+            storage.add_instance(counts, child, sequential_models)
+            for field, value in counts.items():
+                entry["flat_" + field] += value
             if _safe_seq(model):
                 entry["flat_sequential"] += 1
         else:
-            sub = _collect_model_stats(model, memo)
+            sub = _collect_model_stats(model, memo, sequential_models)
             name = _model_label(model.getName())
             entry["children_by_model"][name] = (
                 entry["children_by_model"].get(name, 0) + 1)
             entry["flat_leaves"] += sub["flat_leaves"]
             entry["flat_sequential"] += sub["flat_sequential"]
+            for field in storage.COUNT_FIELDS:
+                entry["flat_" + field] += sub["flat_" + field]
     return entry
 
 
@@ -487,7 +494,7 @@ def get_stats(path: Optional[str] = None, limit: Optional[int] = None,
     else:
         design = SESSION.require_top().design
     memo: dict = {}
-    root = _collect_model_stats(design, memo)
+    root = _collect_model_stats(design, memo, {})
     models = sorted(memo.values(), key=lambda m: -m["flat_leaves"])
     for m in models:
         m["leaf_by_model"] = dict(sorted(
@@ -497,6 +504,7 @@ def get_stats(path: Optional[str] = None, limit: Optional[int] = None,
         "root_model": root["model"],
         "flat_leaves": root["flat_leaves"],
         "flat_sequential": root["flat_sequential"],
+        **{"flat_" + field: root["flat_" + field] for field in storage.COUNT_FIELDS},
         "models": page,
         "total_models": len(models),
         **envelope,

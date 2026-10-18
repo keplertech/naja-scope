@@ -32,28 +32,30 @@ CVA6 regressions, check the latest upstream CVA6 release and default-branch
 revision to see whether the pinned baseline can be updated. Do not leave
 CVA6 pinned indefinitely without retrying newer revisions.
 
-As of 2026-10-13, the verified local regression baseline is CVA6 v5.3.0
+As of 2026-10-18, the verified local regression baseline is CVA6 v5.3.0
 (`2ef1c1b1fca419354920c5487293bc605294904e`), configuration
-`cv32a6_imac_sv32`, with najaeda 0.7.29. All three tests in
+`cv32a6_imac_sv32`, with najaeda 0.7.30. All three tests in
 `tests/test_zzz_cone_cva6.py` and `tests/test_zzz_hierarchy_cva6.py` pass
 against its rebuilt snapshot (built from an isolated v5.3.0 checkout with
 pinned submodules). The demo also pins v5.3.0 in `examples/_cva6_fetch.sh`;
 its default `cv64a6_imafdc_sv39` configuration also elaborates with najaeda
-0.7.29.
+0.7.30.
 
 The latest upstream release remains v5.3.0. Upstream master
 `81245a47fad8fe1a5d562d953ef2662e099def76` (unchanged since 2026-10-06) was
-retried on 2026-10-13 in an isolated checkout with its pinned submodules and
-najaeda 0.7.29. The `cv32a6_imac_sv32` raw-API elaboration still fails, but
-with 3 unsupported elements instead of 7: the MMU's `always_comb`
+retried on 2026-10-18 in an isolated checkout with its pinned submodules and
+najaeda 0.7.30. The `cv32a6_imac_sv32` raw-API elaboration still fails with
+3 unsupported elements: the MMU's `always_comb`
 condition contains an `InvalidExpression` at `core/cva6_mmu/cva6_mmu.sv:404`,
 and two continuous assignments in hpdcache report unsupported RHS calls
 (lines 1212 and 1270; lines 1196, 1204, 1268 and 1269 now pass). The related
 upstream issue
 [CVA6 #3594](https://github.com/openhwfoundation/cva6/issues/3594), covering
-the reversed Sv32 part-select, remains open (one comment, a contributor
-volunteering a fix). Retain the working baseline, and check the issue status
-and retry newer revisions on the next upgrade rather than assuming these
+the reversed Sv32 part-select, remains open (two comments; the contributor
+reports a local fix and passing Slang elaboration for Sv32 and two RV64
+configurations, with formatting and final review pending before PR
+submission). Retain the working baseline, and check the issue status and
+retry newer revisions on the next upgrade rather than assuming these
 limitations remain.
 
 Test candidate revisions in an isolated checkout with their pinned
