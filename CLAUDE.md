@@ -66,3 +66,54 @@ also validate its default `cv64a6_imafdc_sv39` configuration. Promote a newer
 revision only after these checks pass; record its exact commit and najaeda
 version. Otherwise retain the working baseline and record the remaining
 failure and date of the check.
+
+### 2026-10-27 recheck with najaeda 0.7.32
+
+Latest CVA6 release is still v5.3.0
+(`2ef1c1b1fca419354920c5487293bc605294904e`). Its default demo configuration
+`cv64a6_imafdc_sv39` elaborates with 0.7.32, but `cv32a6_imac_sv32` now fails
+at hpdcache `rtl/src/common/hpdcache_data_upsize.sv:154`: unsupported dynamic
+sequential assignment LHS (`buf_q[wrptr_q][words_q[wrptr_q]] <= wdata_i`).
+An isolated raw-API reproducer in `ci/repro_dynamic_packed_write.py`
+passes with 0.7.30 and fails with 0.7.32. The 0.7.30 baseline snapshot was
+preserved; 0.7.32 rejects its schema 0.2.0 (expects 0.3.0), so all three
+unchanged CVA6 regression tests error at reload and cannot yet be reverified.
+
+Current upstream master `742dc82a0c706e0a3bfb98b709fd3ee06d50d12a` was retried
+with its pinned submodules and 0.7.32 in a separate checkout. It has four
+unsupported elements: the existing MMU `InvalidExpression` at line 404, the
+two hpdcache RHS calls at lines 1212 and 1270, and the same dynamic sequential
+write at `hpdcache_data_upsize.sv:162`. CVA6 #3594 remains open with two
+comments. Retain v5.3.0 and the last verified 0.7.30 baseline; naja-scope
+0.1.21 is a candidate blocked from publication pending the engine fix and a
+successful snapshot rebuild/reload plus all three regressions. See
+`docs/releases/0.1.21.md`. Do not work around this by blackboxing the module
+or weakening regression assertions.
+
+### 2026-10-28 recheck with published najaeda 0.7.33
+
+Najaeda 0.7.33 (`64164ffe27c27168f58c4fa8363cc77b4d99af2b`, upstream #501)
+fixes the nested dynamic packed write. CVA6 v5.3.0
+(`2ef1c1b1fca419354920c5487293bc605294904e`) `cv32a6_imac_sv32` now elaborates,
+saves and reloads a fresh schema 0.3.0 snapshot using the published wheel,
+without local engine patches or RTL changes. The raw synthetic reproducer
+and a dependent-index/canonical-DB0 snapshot check also pass. The demo's
+`cv64a6_imafdc_sv39` configuration elaborates successfully.
+
+The new hierarchy has 21 non-assign children: all ten submodules and eleven
+leaves. Comparison against the preserved 0.7.30 snapshot verifies that four
+inverters of the same input bit at `cva6.sv:1317` are now shared as one.
+The hierarchy tests retain exact counts and pagination assertions, updated
+for this lowering change, and additionally check the exact leaf-model
+histogram. The cross-hierarchy cone assertions are unchanged. All three
+CVA6 regressions pass against this rebuilt cache; the other 127 tests pass
+as well, including schematic integration.
+
+The latest upstream release is still v5.3.0. Default-branch commit
+`742dc82a0c706e0a3bfb98b709fd3ee06d50d12a` was retried with its pinned
+submodules and 0.7.33: three issues remain (MMU InvalidExpression at line
+404, hpdcache RHS calls at lines 1212 and 1270). CVA6 #3594 remains open
+with two comments. Retain v5.3.0; retry newer revisions on the next upgrade.
+Snapshot schema evolution is expected: regenerate snapshots rather than
+requiring backward compatibility. Keep 0.1.21 unpublished until a release
+is explicitly requested. See `docs/releases/0.1.21.md` for validation details.

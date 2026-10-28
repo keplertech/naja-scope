@@ -1,4 +1,8 @@
-# Ship the runnable examples (RTL + gate-level) in the source distribution.
-# The example tests under tests/ reference ../examples, so this also makes the
-# bundled test suite runnable from an unpacked sdist.
+# Ship the examples and everything required to run the bundled test suite.
 graft examples
+graft tests
+graft benchmarks
+graft docs/releases
+include server.json
+include ci/repro_dynamic_packed_write.py
+global-exclude __pycache__ *.py[cod]

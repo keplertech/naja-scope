@@ -12,12 +12,15 @@ def model_key(model):
 
 def memory_info(instance):
     model = instance.getModel()
-    lib = model.getLibrary()
-    # NLDB0::isMemory uses the reserved DB0 MEMORY library. Do not classify
-    # user modules by a suggestive name or WIDTH/DEPTH parameters alone.
-    if not (model.isPrimitive() and lib.getDB().getID() == 0
-            and lib.getName() == 'MEMORY'):
+    # Resolve native DB0 interfaces on the instance: dimensions can depend on
+    # its parameters. Other libraries' memory models do not yet survive
+    # naja-if reloads, so keep capacity summaries limited to DB0 primitives.
+    if model.getLibrary().getDB().getID() != 0 or not model.hasMemoryInterface():
         return None
+    interface = instance.getMemoryInterface()
+    # Instance interfaces omit disconnected ports. Capacity and RAM/ROM
+    # classification describe the cell, including its unused write ports.
+    declared = model.getMemoryInterface()
 
     def value(name):
         param = instance.getInstParameter(name)
@@ -25,15 +28,17 @@ def memory_info(instance):
             param = model.getParameter(name)
         return param.getValue() if param is not None else None
 
-    width, depth = int(value('WIDTH')), int(value('DEPTH'))
-    writes = int(value('WR_PORTS'))
-    initialized = bool(int(value('INIT_ENABLE')))
+    width, depth = interface['width'], interface['depth']
+    writes = len(declared['writePorts'])
+    initialized = value('INIT_ENABLE') == '1'
     info = {
         'instance': snl.inst_segment(instance),
         'model': model.getName(),
         'kind': 'rom' if writes == 0 else 'ram',
         'width': width, 'depth': depth, 'bits': width * depth,
-        'read_ports': int(value('RD_PORTS')), 'write_ports': writes,
+        'read_ports': len(declared['readPorts']), 'write_ports': writes,
+        'address_bits': interface['abits'],
+        'reset_mode': interface['resetMode'],
         'initialized': initialized,
     }
     if initialized:

@@ -160,7 +160,8 @@ def module_card(session: Session, module: str,
         without a state model. memory_bits is width * depth for native DB0
         RAM/ROM primitives. `memories` lists at most max_models such children,
         with initialization previews capped at 64 characters; address zero is
-        the least-significant word of INIT.
+        the least-significant word of INIT. address_bits and reset_mode come
+        from the instance's native memory interface (not signal names).
       - `parameters`: name/value pairs, when present. Hard fact.
       - `src`: the module's source range as `file:start-end`, when known.
       - `clock_candidates` / `reset_candidates` (+ `active_low_guess`):

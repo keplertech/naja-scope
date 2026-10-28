@@ -76,6 +76,8 @@ def test_memory_and_register_counts(tmp_path):
     assert rom['init_truncated'] is False
     assert ram['initialized'] is False
     assert ram['write_ports'] == 1
+    assert rom['address_bits'] == ram['address_bits'] == 2
+    assert rom['reset_mode'] == ram['reset_mode'] == 'none'
     assert 'init_preview' not in ram
     assert card['memories_truncated'] is False
     # Direct-child counts differ from totals across both instances of store.
@@ -200,3 +202,47 @@ def test_parameter_dependent_register_states(tmp_path):
     naja.SNLInstParameter.create(double, param, "1'b1")
     assert api.get_module_card('top')['counts']['register_bits'] == 3
     assert api.get_stats()['flat_register_bits'] == 13
+
+
+def test_memory_instance_dimensions_and_disconnected_ports(tmp_path):
+    load_storage(tmp_path)
+    design = SESSION.require_top().design.getInstance('u0').getModel()
+    ram = next(i for i in design.getInstances()
+               if i.getModel().hasMemoryInterface()
+               and i.getModel().getMemoryInterface()['writePorts'])
+    disconnected = naja.SNLInstance.create(design, ram.getModel(), 'unused_ram')
+    for name, value in [('WIDTH', '3'), ('DEPTH', '2'), ('ABITS', '1')]:
+        naja.SNLInstParameter.create(
+            disconnected, ram.getModel().getParameter(name), value)
+    card = api.get_module_card('store')
+    detail = next(m for m in card['memories'] if m['instance'] == 'unused_ram')
+    assert detail['kind'] == 'ram'
+    assert (detail['width'], detail['depth'], detail['bits']) == (3, 2, 6)
+    assert detail['address_bits'] == 1
+    assert detail['read_ports'] == detail['write_ports'] == 1
+    assert card['counts']['memory_bits'] == 70
+    assert card['counts']['ram_instances'] == 2
+
+
+def test_memory_reset_mode_roundtrip(tmp_path):
+    source = tmp_path / 'reset_memory.sv'
+    source.write_text('''module top(input clk, rst,
+      input [1:0] a, input [2:0] d, output [2:0] q);
+      logic [2:0] current [0:3], following [0:3];
+      always_comb begin following = current; following[a] = d; end
+      always_ff @(posedge clk or negedge rst) begin
+        if (~rst) current <= '{3'd0, 3'd0, 3'd0, 3'd0};
+        else current <= following;
+      end
+      assign q = current[a];
+    endmodule''')
+    api.load_systemverilog([str(source)])
+    card = api.get_module_card('top')
+    assert len(card['memories']) == 1
+    assert card['memories'][0]['reset_mode'] == 'async_low'
+    assert card['memories'][0]['address_bits'] == 2
+    snapshot = str(tmp_path / 'snapshot')
+    api.save_snapshot(snapshot)
+    SESSION.reset()
+    api.load_snapshot(snapshot)
+    assert api.get_module_card('top') == card

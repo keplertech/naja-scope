@@ -87,3 +87,33 @@ def test_blackbox_multi_writer_memories(tmp_path):
     assert ram["model"] == "dp_ram"
     assert ram["is_leaf"] is True
     assert SESSION.load_spec["blackbox_multi_writer_memories"] is True
+
+
+def test_default_timescale_survives_snapshot_and_intent_reload(tmp_path):
+    from naja_scope import server
+
+    source = tmp_path / "timescale.sv"
+    source.write_text(
+        "module child(input a, output y); assign y = a; endmodule\n"
+        "module top(input a, output y);\n"
+        "  timeunit 1ns; timeprecision 1ps;\n"
+        "  child u(.*);\n"
+        "endmodule\n")
+    SESSION.reset()
+    try:
+        with pytest.raises(ScopeError, match="time scale"):
+            api.load_systemverilog([str(source)], top="top")
+        SESSION.reset()
+        result = server.load_systemverilog(
+            files=[str(source)], top="top", default_timescale="1ns/1ps")
+        assert result["top"]["model"] == "top"
+        assert SESSION.load_spec["default_timescale"] == "1ns/1ps"
+        snapshot = str(tmp_path / "snapshot")
+        api.save_snapshot(snapshot)
+        SESSION.reset()
+        api.load_snapshot(snapshot)
+        assert SESSION.load_spec["default_timescale"] == "1ns/1ps"
+        assert api.load_intent()["intent_loaded"] is True
+        assert api.get_hierarchy()["root"]["model"] == "top"
+    finally:
+        SESSION.reset()

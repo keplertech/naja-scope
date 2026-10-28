@@ -91,6 +91,20 @@ end architecture;
     assert result["top"]["model"] == "top"
     assert api.resolve("top.u")["matches"][0]["model"] == "child"
     assert api.status()["loaded_files"] == [str(top), str(child)]
+    # Coordinates refer to each original input file, not a concatenated batch.
+    sources = {path: api.get_source(path, context_lines=0) for path in
+               ("top", "top.a", "top.u", "top.u.a")}
+    assert "entity top is" in sources["top"]["text"]
+    assert sources["top.a"]["file"] == str(top)
+    assert "a : in std_logic" in sources["top.a"]["text"]
+    assert "u : entity work.child" in sources["top.u"]["text"]
+    assert sources["top.u.a"]["file"] == str(child)
+    assert "a : in std_logic" in sources["top.u.a"]["text"]
+    snapshot = str(tmp_path / "snapshot")
+    api.save_snapshot(snapshot)
+    SESSION.reset()
+    api.load_snapshot(snapshot)
+    assert {p: api.get_source(p, context_lines=0) for p in sources} == sources
 
 
 def test_snapshot_preserves_vhdl_intent_guard(tmp_path, vhdl_file, monkeypatch):
@@ -105,6 +119,39 @@ def test_snapshot_preserves_vhdl_intent_guard(tmp_path, vhdl_file, monkeypatch):
     assert "SystemVerilog-only" in result["intent_note"]
     assert api.status()["intent_loadable"] is False
     assert api.status()["top"]["model"] == "wire_top"
+
+
+def test_signal_and_inferred_register_source_roundtrip(tmp_path):
+    source = tmp_path / "seq.vhd"
+    source.write_text("""library ieee;
+use ieee.std_logic_1164.all;
+entity seq_top is
+  port(clk, d : in std_logic; q : out std_logic);
+end entity;
+architecture rtl of seq_top is
+  signal state : std_logic;
+begin
+  process(clk) begin
+    if rising_edge(clk) then state <= d; end if;
+  end process;
+  q <= state;
+end architecture;
+""")
+    with pytest.warns(RuntimeWarning, match="Beta"):
+        api.load_vhdl(str(source))
+    declaration = api.get_source("seq_top.state", context_lines=0)
+    assert declaration["start"] == declaration["end"] == 7
+    assert declaration["text"].strip() == "signal state : std_logic;"
+    driver = api.get_drivers("seq_top.q")["leaf_drivers"][0]
+    process = api.get_source(driver["path"], context_lines=0)
+    assert process["start"] == 9 and process["end"] == 11
+    assert "rising_edge(clk)" in process["text"]
+    snapshot = str(tmp_path / "snapshot")
+    api.save_snapshot(snapshot)
+    SESSION.reset()
+    api.load_snapshot(snapshot)
+    assert api.get_source("seq_top.state", context_lines=0) == declaration
+    assert api.get_source(driver["path"], context_lines=0) == process
 
 
 def test_errors_and_tool_schema(tmp_path):
