@@ -85,13 +85,13 @@ def main():
     print(f"  flattened leaf gates    : {root['flat_leaves']:,}")
     print(f"  sequential instances    : {root['flat_sequential']:,}")
     print(f"  distinct model variants : {stats['total_models']}")
-    # Revalidated on the pinned CORE-V-MCU commit with najaeda 0.7.30:
-    # 630,239 leaves (631,603 with 0.7.29). A same-source comparison shows
-    # changed GPIO/arbiter/FIFO lowering and a table-select replaced by a ROM;
-    # sequential cell count, hierarchy model count, blackboxes, and CDC fanout
-    # remain unchanged. These count native instances, including word-wide
-    # cells, rather than RTL bits.
-    assert root["flat_leaves"] == 630_239, "elaborated leaf count drifted"
+    # Revalidated on the pinned commit with published najaeda 0.7.33:
+    # 285,546 leaves (630,239 with 0.7.30). Raw same-source enumeration shows
+    # compact word-wide add/subtract/shift cells replacing scalar gate networks.
+    # All 320 module variants, hierarchical child-model multiplicities,
+    # per-module sequential counts, and 12 blackboxes remain unchanged.
+    # These count native instances, including word-wide cells, not RTL bits.
+    assert root["flat_leaves"] == 285_546, "elaborated leaf count drifted"
     assert root["flat_sequential"] == 6_501, "sequential instance count drifted"
     assert stats["total_models"] == 320, "elaborated model count drifted"
 

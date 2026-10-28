@@ -103,7 +103,8 @@ def load_systemverilog(files: Optional[List[str]] = None,
                        intent: bool = False,
                        defines: Optional[List[str]] = None,
                        allow_unknown_designs: bool = False,
-                       blackbox_multi_writer_memories: bool = False) -> dict:
+                       blackbox_multi_writer_memories: bool = False,
+                       default_timescale: Optional[str] = None) -> dict:
     # Warm load: retain the slang AST link inline (keep_ast_link) when intent is
     # requested — no separate elaboration step. Off by default (the Compilation
     # is GB-class on large designs).
@@ -114,7 +115,8 @@ def load_systemverilog(files: Optional[List[str]] = None,
                                               keep_ast_link=want,
                                               defines=defines,
                                               allow_unknown_designs=allow_unknown_designs,
-                                              blackbox_multi_writer_memories=blackbox_multi_writer_memories)
+                                              blackbox_multi_writer_memories=blackbox_multi_writer_memories,
+                                              default_timescale=default_timescale)
     out = {"top": _summary(top_instance)}
     if want:
         out["intent_loaded"] = SESSION.intent_available
@@ -372,9 +374,9 @@ def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT,
         return {
             "object": resolved.path,
             "error": "No source range known for this object.",
-            "hint": ("Source ranges come from SystemVerilog loading and "
-                     "Verilog netlists; VHDL beta objects and synthesized "
-                     "anonymous objects may have none."),
+            "hint": ("Source ranges come from SystemVerilog, VHDL and "
+                     "Verilog netlist loading; synthesized anonymous "
+                     "objects may have none."),
         }
     file_path = SESSION.find_source_file(rng.file)
     if file_path is None:

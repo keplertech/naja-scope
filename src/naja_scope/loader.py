@@ -24,7 +24,7 @@ from najaeda import naja
 from .errors import ScopeError, SVInternalError, SVSyntaxError, SVUnsupportedError
 
 # najaeda>=0.7.9 introduced these typed exceptions; naja-scope currently
-# requires najaeda>=0.7.30.
+# requires najaeda>=0.7.33.
 # directly from loadSystemVerilog; anything loaded out-of-band below that floor
 # (e.g. via NAJAEDA_SRC pointing at an older checkout) only raises plain
 # RuntimeError. Detect once so classification degrades gracefully instead of
@@ -83,7 +83,8 @@ def load_systemverilog(files: List[str], flist: Optional[str] = None,
                        keep_ast_link: bool = False,
                        defines: Optional[List[str]] = None,
                        allow_unknown_designs: bool = False,
-                       blackbox_multi_writer_memories: bool = False):
+                       blackbox_multi_writer_memories: bool = False,
+                       default_timescale: Optional[str] = None):
     db = get_top_db()
     effective_flist = flist
     temp_flist = None
@@ -120,6 +121,7 @@ def load_systemverilog(files: List[str], flist: Optional[str] = None,
             # najaeda>=0.7.29: blackbox a whole module whose memory has
             # multiple writers (unsupported) instead of failing elaboration.
             blackbox_multi_writer_memories=blackbox_multi_writer_memories,
+            default_timescale=default_timescale,
         )
     except RuntimeError as e:
         raise _classify_sv_load_error(e) from e
@@ -134,7 +136,7 @@ def load_verilog(files: List[str], keep_assigns: bool = True,
     # najaeda>=0.7.11 renamed the raw NLDB.loadVerilog kwarg from
     # allow_unknown_designs to blackbox_unknown_modules; naja-scope's own
     # public parameter name is kept stable across that rename.
-    get_top_db().loadVerilog(
+    get_top_db().loadGateLevelVerilog(
         files,
         keep_assigns=keep_assigns,
         blackbox_unknown_modules=allow_unknown_designs,

@@ -141,8 +141,8 @@ def _legacy_loc(obj) -> Optional[Loc]:
 def source_loc(obj) -> Optional[Loc]:
     """Normalised (file, line, end_line, column, end_column), or None.
 
-    Prefers the source declaration (populated for SystemVerilog *and*
-    gate-level Verilog netlists), then the legacy getSourceLoc, then the first
+    Prefers the source declaration (SystemVerilog, VHDL and gate-level
+    Verilog netlists), then the legacy getSourceLoc, then the first
     source origin (SV cells inferred from a process carry only an origin).
     """
     decl, origins = _source_refs(obj)

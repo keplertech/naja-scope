@@ -158,6 +158,11 @@ def load_systemverilog(
         Field(description="Black-box whole modules whose memories have "
                           "unsupported multiple writers instead of failing."),
     ] = False,
+    default_timescale: Annotated[
+        Optional[str],
+        Field(description="Fallback time scale for modules without an explicit "
+                          "time unit, e.g. 1ns/1ps; omit to use the frontend default."),
+    ] = None,
 ) -> dict:
     """Elaborate local SystemVerilog sources into the active design session.
     Use this for SystemVerilog RTL; use load_vhdl for VHDL (beta), or
@@ -172,7 +177,8 @@ def load_systemverilog(
     intent=True retains naja's in-engine SNL↔slang link for get_intent."""
     return api.load_systemverilog(files, flist, top, keep_assigns, intent,
                                   defines, allow_unknown_designs,
-                                  blackbox_multi_writer_memories)
+                                  blackbox_multi_writer_memories,
+                                  default_timescale)
 
 
 @_tool(annotations=SESSION_MUTATION)
@@ -224,8 +230,9 @@ def load_vhdl(
     first, then the top. Package-only files or entities awaiting generics may
     return top=null.
     Use hierarchy, cards and connectivity queries on the elaborated design.
-    SystemVerilog intent recovery is unavailable; source ranges are not
-    guaranteed. Unsupported constructs may fail during beta development.
+    Use get_source for entity, port, signal, instance and process source
+    references. SystemVerilog intent recovery is unavailable.
+    Unsupported constructs may fail during beta development.
     Returns the top summary when elaborated, language and beta status."""
     return api.load_vhdl(file, top)
 

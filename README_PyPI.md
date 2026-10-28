@@ -47,6 +47,11 @@ turns your design into something an agent can *navigate*:
 - 💡 **Recover design intent** — enum state names, struct/union fields, and
   parameter formulas that normally vanish when a design is elaborated.
 
+Requires **najaeda 0.7.33 or newer**, including the CVA6 RV32 elaboration
+fix. See the
+[0.1.21 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.21.md)
+for test results and snapshot migration requirements.
+
 Works on **RTL and gate-level netlists** alike — load elaborated SystemVerilog,
 or a post-synthesis structural Verilog netlist plus its Liberty standard-cell
 library (see [Gate-level designs](#gate-level-designs)). VHDL loading is in
@@ -54,7 +59,9 @@ library (see [Gate-level designs](#gate-level-designs)). VHDL loading is in
 
 `get_module_card` reports direct-child register bits and inferred RAM/ROM
 summaries: width, depth, capacity in bits, read/write port counts, and
-initialization status. It lists up to 12 memories, with `memories_truncated`
+initialization status. Native memory interfaces also report `address_bits`
+and `reset_mode` (`none`, `async_low`, `async_high`, `sync_low`, or
+`sync_high`). It lists up to 12 memories, with `memories_truncated`
 when more exist; initialized memories include a 64-character `init_preview`
 and `init_truncated`. Address zero occupies the least-significant word.
 
@@ -177,6 +184,13 @@ line in the netlist, and for Yosys output `yosys_source_attributes=True` adds
 
 ---
 
+## SystemVerilog time units
+
+For mixed RTL where only some modules declare a time unit, pass
+`default_timescale="1ns/1ps"` to `load_systemverilog`. It supplies a fallback
+for modules without a time unit and preserves explicit declarations. The
+setting survives snapshots and `load_intent` re-elaboration.
+
 ## VHDL (beta)
 
 VHDL loading is available in beta. Call
@@ -185,7 +199,8 @@ explore its elaborated hierarchy and connectivity; the files may be listed in
 any order. A single path per call also works (load packages first);
 package-only files may return `top: null` until the top file is loaded. The frontend supports a restricted two-state RTL subset,
 and supported constructs may change. `get_intent`/`load_intent` remain
-SystemVerilog-only; VHDL source ranges are not guaranteed.
+SystemVerilog-only. `get_source` reads VHDL entity, port, signal, instance
+and process origins, including after snapshot reloads.
 
 ---
 

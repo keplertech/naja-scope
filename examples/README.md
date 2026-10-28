@@ -225,14 +225,15 @@ pre-flattening step — in about 10 seconds, and shows:
   clock-gate/mux/inverter cells, ...) resolve as `AutoBlackBox` models instead
   of failing the load — matching naja core's own `core_v_mcu` regression case
   reference list exactly.
-- **Design scale** — 722,402 flattened leaf gates, 97,376 flip-flops, 320
-  distinct elaborated module variants, in one `get_stats` call.
+- **Design scale** — 285,546 flattened leaf instances, 6,501 sequential
+  instances and 320 distinct elaborated module variants with najaeda 0.7.33,
+  in one `get_stats` call. Word-wide native primitives count as one instance.
 - **A clock net traced through renamed ports** — a `pulp_sync_wedge` CDC
   synchronizer buried six levels deep in the eFPGA subsystem has a `clk_i`
   pin; `get_loads` resolves the electrical net it sits on (not a text match)
   across every hierarchy boundary it crosses — the pin is called `clk_i` here,
   `clk` there, `sys_clk_i` three levels up — and finds it's the SoC's
-  distributed system clock: 1,563 connections spanning timers, µDMA, L2
+  distributed system clock: 1,705 connections spanning timers, µDMA, L2
   memory, the eFPGA subsystem, and the PLL macro itself. No grep across ~370
   files could assemble that, because there's no single string to search for.
 

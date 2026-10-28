@@ -72,20 +72,23 @@ class Session:
                            keep_ast_link: bool = False,
                            defines: Optional[List[str]] = None,
                            allow_unknown_designs: bool = False,
-                           blackbox_multi_writer_memories: bool = False) -> "snl.InstNode":
+                           blackbox_multi_writer_memories: bool = False,
+                           default_timescale: Optional[str] = None) -> "snl.InstNode":
         loader.load_systemverilog(files, flist=flist, top=top,
                                   keep_assigns=keep_assigns,
                                   keep_ast_link=keep_ast_link,
                                   defines=defines,
                                   allow_unknown_designs=allow_unknown_designs,
-                                  blackbox_multi_writer_memories=blackbox_multi_writer_memories)
+                                  blackbox_multi_writer_memories=blackbox_multi_writer_memories,
+                                  default_timescale=default_timescale)
         self._record_sources(files)
         if flist:
             self._record_sources([flist])
         self.load_spec = {"files": list(files or []), "flist": flist,
                           "top": top, "defines": defines,
                           "allow_unknown_designs": allow_unknown_designs,
-                          "blackbox_multi_writer_memories": blackbox_multi_writer_memories}
+                          "blackbox_multi_writer_memories": blackbox_multi_writer_memories,
+                          "default_timescale": default_timescale}
         return snl.top_node()
 
     @design_mutation
@@ -137,6 +140,7 @@ class Session:
         allow_unknown_designs = spec.get("allow_unknown_designs", False)
         blackbox_multi_writer_memories = spec.get(
             "blackbox_multi_writer_memories", False)
+        default_timescale = spec.get("default_timescale")
         if not files and not flist:
             raise ScopeError(
                 "load_intent needs a flist or files to elaborate the intent "
@@ -151,7 +155,8 @@ class Session:
         self.load_systemverilog(files or [], flist=flist, top=top,
                                 keep_ast_link=True, defines=defines,
                                 allow_unknown_designs=allow_unknown_designs,
-                                blackbox_multi_writer_memories=blackbox_multi_writer_memories)
+                                blackbox_multi_writer_memories=blackbox_multi_writer_memories,
+                                default_timescale=default_timescale)
         return self.intent
 
     @property
