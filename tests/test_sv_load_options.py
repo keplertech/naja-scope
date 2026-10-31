@@ -117,3 +117,26 @@ def test_default_timescale_survives_snapshot_and_intent_reload(tmp_path):
         assert api.get_hierarchy()["root"]["model"] == "top"
     finally:
         SESSION.reset()
+
+
+def test_default_timescale_without_top_with_flist(tmp_path):
+    source = tmp_path / "mixed.sv"
+    source.write_text(
+        "module child(input a, output y); assign y=a; endmodule\n"
+        "module top(input a, output y); timeunit 1ns; timeprecision 1ps;\n"
+        "child u(.*); endmodule\n")
+    flist = tmp_path / "sources.f"
+    flist.write_text(f'"{source}"\n')
+    SESSION.reset()
+    try:
+        result = api.load_systemverilog(flist=str(flist), default_timescale="1ns/1ps")
+        assert result["top"]["model"] == "top"
+        assert api.resolve("top.u")["matches"][0]["model"] == "child"
+    finally:
+        SESSION.reset()
+
+
+@pytest.mark.parametrize("timescale", ["", "1ns/1ps\n--top other", 123])
+def test_default_timescale_rejects_invalid_filelist_tokens(timescale):
+    with pytest.raises(ScopeError, match="default_timescale"):
+        api.load_systemverilog(default_timescale=timescale)

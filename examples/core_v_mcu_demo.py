@@ -85,13 +85,12 @@ def main():
     print(f"  flattened leaf gates    : {root['flat_leaves']:,}")
     print(f"  sequential instances    : {root['flat_sequential']:,}")
     print(f"  distinct model variants : {stats['total_models']}")
-    # Revalidated on the pinned commit with published najaeda 0.7.33:
-    # 285,546 leaves (630,239 with 0.7.30). Raw same-source enumeration shows
-    # compact word-wide add/subtract/shift cells replacing scalar gate networks.
-    # All 320 module variants, hierarchical child-model multiplicities,
-    # per-module sequential counts, and 12 blackboxes remain unchanged.
-    # These count native instances, including word-wide cells, not RTL bits.
-    assert root["flat_leaves"] == 285_546, "elaborated leaf count drifted"
+    # Revalidated with published najaeda 0.7.34: 303,257 leaves
+    # (285,546 with 0.7.33). Same-source raw enumeration confirms changed
+    # OR/mux lowering, with all module names, hierarchical multiplicities,
+    # per-module sequential counts, blackboxes and CDC endpoints preserved.
+    # Word-wide native cells count as one instance, not as individual RTL bits.
+    assert root["flat_leaves"] == 303_257, "elaborated leaf count drifted"
     assert root["flat_sequential"] == 6_501, "sequential instance count drifted"
     assert stats["total_models"] == 320, "elaborated model count drifted"
 

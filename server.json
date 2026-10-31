@@ -7,12 +7,12 @@
     "url": "https://github.com/keplertech/naja-scope",
     "source": "github"
   },
-  "version": "0.1.21",
+  "version": "0.1.22",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "naja-scope",
-      "version": "0.1.21",
+      "version": "0.1.22",
       "transport": {
         "type": "stdio"
       }

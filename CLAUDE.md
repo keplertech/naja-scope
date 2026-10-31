@@ -117,3 +117,37 @@ with two comments. Retain v5.3.0; retry newer revisions on the next upgrade.
 Snapshot schema evolution is expected: regenerate snapshots rather than
 requiring backward compatibility. Keep 0.1.21 unpublished until a release
 is explicitly requested. See `docs/releases/0.1.21.md` for validation details.
+
+### 2026-10-31 reevaluation against latest naja main
+
+Clean upstream commit `52620d2012be118c28cafd6089400984b5c3e674`, built in an
+isolated CMake Release checkout with pinned submodules, passes all three
+unchanged CVA6 v5.3.0 RV32 regressions after fresh snapshot save/reload. Its
+complete `cv64a6_imafdc_sv39` demo passes as well. Published-wheel caches and
+user working checkouts were preserved.
+
+Latest naja removed the raw default_timescale keyword. Naja-scope's proposed
+compatibility change passes --timescale through the temporary file list;
+131 non-CVA6 tests pass with both latest main and published 0.7.33.
+
+Latest CVA6 release and master remain v5.3.0 and
+`742dc82a0c706e0a3bfb98b709fd3ee06d50d12a`. Master's two hpdcache RHS-call
+failures are fixed on this naja revision. Only the MMU InvalidExpression at
+cva6_mmu.sv:404 remains; CVA6 #3594 is open with two comments. Retain v5.3.0.
+CORE-V-MCU loads, but its leaf count changes to 303,257 from 285,546; its
+published-version demo assertion is unchanged pending review. See
+`docs/validation/latest-naja-2026-10-31.md` for exact results and release limits.
+
+### Published najaeda 0.7.34 validation
+
+The published wheel at `16d8d8b9343340245cd309d02d32626fd8a3b843` fixes both
+hpdcache RHS-call limitations. CVA6 master remains
+`742dc82a0c706e0a3bfb98b709fd3ee06d50d12a` and fails only the MMU expression
+at line 404. Retain latest release v5.3.0. Its RV32 fresh snapshot reload and
+all three regression tests pass; the complete default RV64 demo passes.
+The CORE-V-MCU demo passes with reviewed count 303,257; sequential/model/
+blackbox/CDC fingerprints remain unchanged. Naja-scope's 0.1.22 candidate
+requires 0.7.34 and adapts the removed default_timescale raw keyword via the
+frontend file list. VHDL intent exists in the engine and passes a raw smoke
+check, but is not yet integrated into naja-scope. See
+`docs/validation/najaeda-0.7.34.md`. No publication was performed.

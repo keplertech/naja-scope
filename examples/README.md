@@ -225,8 +225,8 @@ pre-flattening step — in about 10 seconds, and shows:
   clock-gate/mux/inverter cells, ...) resolve as `AutoBlackBox` models instead
   of failing the load — matching naja core's own `core_v_mcu` regression case
   reference list exactly.
-- **Design scale** — 285,546 flattened leaf instances, 6,501 sequential
-  instances and 320 distinct elaborated module variants with najaeda 0.7.33,
+- **Design scale** — 303,257 flattened leaf instances, 6,501 sequential
+  instances and 320 distinct elaborated module variants with najaeda 0.7.34,
   in one `get_stats` call. Word-wide native primitives count as one instance.
 - **A clock net traced through renamed ports** — a `pulp_sync_wedge` CDC
   synchronizer buried six levels deep in the eFPGA subsystem has a `clk_i`

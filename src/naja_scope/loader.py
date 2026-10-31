@@ -24,7 +24,7 @@ from najaeda import naja
 from .errors import ScopeError, SVInternalError, SVSyntaxError, SVUnsupportedError
 
 # najaeda>=0.7.9 introduced these typed exceptions; naja-scope currently
-# requires najaeda>=0.7.33.
+# requires najaeda>=0.7.34.
 # directly from loadSystemVerilog; anything loaded out-of-band below that floor
 # (e.g. via NAJAEDA_SRC pointing at an older checkout) only raises plain
 # RuntimeError. Detect once so classification degrades gracefully instead of
@@ -89,11 +89,21 @@ def load_systemverilog(files: List[str], flist: Optional[str] = None,
     effective_flist = flist
     temp_flist = None
     # Inject --top through a temporary flist, as najaeda does (no raw --top arg).
-    if top is not None:
+    if default_timescale is not None:
+        if (not isinstance(default_timescale, str)
+                or not re.fullmatch(r"\d+(?:s|ms|us|ns|ps|fs)/\d+(?:s|ms|us|ns|ps|fs)",
+                                    default_timescale)):
+            raise ScopeError("default_timescale must be a time scale such as 1ns/1ps.")
+    if top is not None or default_timescale is not None:
         with tempfile.NamedTemporaryFile(
                 "w", suffix=".f", delete=False, encoding="utf-8") as f:
             temp_flist = f.name
-            f.write(f"--top {top}\n")
+            if top is not None:
+                f.write(f"--top {top}\n")
+            # Works with 0.7.33 and newer frontend_options-based bindings,
+            # which no longer accept the raw default_timescale keyword.
+            if default_timescale is not None:
+                f.write(f"--timescale={default_timescale}\n")
             if flist:
                 quoted = flist.replace("\\", "\\\\").replace('"', '\\"')
                 f.write(f'-f "{quoted}"\n')
@@ -121,7 +131,6 @@ def load_systemverilog(files: List[str], flist: Optional[str] = None,
             # najaeda>=0.7.29: blackbox a whole module whose memory has
             # multiple writers (unsupported) instead of failing elaboration.
             blackbox_multi_writer_memories=blackbox_multi_writer_memories,
-            default_timescale=default_timescale,
         )
     except RuntimeError as e:
         raise _classify_sv_load_error(e) from e
