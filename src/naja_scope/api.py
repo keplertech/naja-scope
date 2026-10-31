@@ -88,9 +88,8 @@ def status() -> dict:
         # Intent layer (get_intent): warm-only, so report whether it is
         # live in this session and whether the inputs to (re)load it are known.
         "intent_loaded": SESSION.intent_available,
-        "intent_loadable": (SESSION.load_spec.get("language") != "vhdl"
-                            and bool(SESSION.load_spec.get("flist")
-                                     or SESSION.load_spec.get("files"))),
+        "intent_loadable": bool(SESSION.load_spec.get("flist")
+                                or SESSION.load_spec.get("files")),
     }
     return out
 
@@ -150,11 +149,14 @@ def load_verilog(files: List[str], keep_assigns: bool = True,
 
 
 @serialized
-def load_vhdl(file: Union[str, List[str]], top: Optional[str] = None) -> dict:
+def load_vhdl(file: Union[str, List[str]], top: Optional[str] = None,
+              intent: bool = False) -> dict:
     """Load one VHDL file, or a batch in any order, with najaeda's beta frontend."""
-    node = SESSION.load_vhdl(file, top=top)
+    want = bool(intent or _auto_intent())
+    node = SESSION.load_vhdl(file, top=top, keep_ast_link=want)
     out = {"top": _summary(node) if node is not None else None,
-           "language": "vhdl", "beta": True, "intent_loaded": False}
+           "language": "vhdl", "beta": True,
+           "intent_loaded": SESSION.intent_available}
     if node is None:
         out["note"] = ("Source retained without elaborating a top; package-only "
                        "files and entities with required generics can do this. "
@@ -526,8 +528,8 @@ def get_intent(ref: str, want: str = "auto") -> dict:
     if not SESSION.intent_available:
         return {"intent_loaded": False,
                 "note": ("intent layer not loaded; source range is available "
-                         "via get_source. Load a warm SystemVerilog session "
-                         "with the AST link (load_systemverilog intent=True, "
+                         "via get_source. Load a warm RTL session with the "
+                         "AST link (load_systemverilog/load_vhdl intent=True, "
                          "NAJA_SCOPE_INTENT=1, or load_intent).")}
     ip = SESSION.intent
     try:

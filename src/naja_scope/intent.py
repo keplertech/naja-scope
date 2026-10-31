@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Living-intent layer — thin client over naja's in-engine SNL↔slang link.
+"""Living-intent layer — thin client over naja's in-engine SNL↔source link.
 
 Recovers the source-level facts erased by SystemVerilog lowering — enum/FSM state
 names + encodings, declared type names, and symbolic parameter expressions — by
@@ -20,6 +20,13 @@ object (`resolve.py`), then handed to `naja.intent_*`. This is why anonymous
 lowered primitives (`#<id>`) now answer — they resolve to the FF instance, which
 the bimap maps back to its declaring source symbol. Package members (`pkg::name`)
 have no SNL object and go through the name-keyed `naja.intentPackageMember`.
+
+VHDL uses the same `keep_ast_link` retention, but naja answers it with a separate
+record schema and `naja.intentPackageMember` does not cover it. The `_vhdl_*`
+helpers normalize those records to the keys above; package members come from
+`naja.intentDescribe` declarations. Records carry no field bit offsets, so VHDL
+fields report width only, and inferred registers have no source symbol: ask for
+the signal, not its flop.
 """
 from __future__ import annotations
 
@@ -51,6 +58,64 @@ def _decimal_value(value):
         return value
 
 
+def _vhdl_src(source) -> str | None:
+    return f"{source['file']}:{source['line']}" if source else None
+
+
+def _vhdl_range(constraint_or_range) -> str:
+    """`3 downto 0` from a resolved range, or the symbolic `WIDTH-1 downto 0`
+    from a declared constraint."""
+    r = constraint_or_range
+    left = r.get("left_expression", {}).get("text", r.get("left"))
+    right = r.get("right_expression", {}).get("text", r.get("right"))
+    return f"{left} {r.get('direction')} {right}"
+
+
+def _vhdl_type_name(rec: dict) -> str | None:
+    """Declared type name, package-qualified the way get_intent takes it back."""
+    decl = rec.get("declaration") or {}
+    if decl.get("owner_kind") == "package":
+        return f"{decl['owner']}::{rec['name']}"
+    return rec.get("name")
+
+
+def _vhdl_type(rec: dict) -> dict:
+    """A naja VHDL resolved type, in the SystemVerilog get_type shape."""
+    kind = {"enumeration": "enum"}.get(rec.get("kind"), rec.get("kind"))
+    out = {"type": _vhdl_type_name(rec), "canonical_kind": kind,
+           "width": rec.get("width")}
+    decl = _vhdl_src((rec.get("declaration") or {}).get("source"))
+    if kind == "enum":
+        width = rec.get("width", 0)
+        out["enum"] = {
+            "width": width, "decl": decl,
+            "members": [{"name": m["name"], "ordinal": m["ordinal"],
+                         "encoding": format(m["representation"], f"0{width}b")}
+                        for m in rec.get("literals", [])]}
+    elif kind == "record":
+        out["struct"] = {
+            "width": rec.get("width"), "decl": decl,
+            "fields": [{"name": f["name"],
+                        "type": f.get("type", {}).get("name"),
+                        "width": f.get("type", {}).get("width")}
+                       for f in rec.get("fields", [])]}
+    if rec.get("ranges"):
+        out["ranges"] = [_vhdl_range(r) for r in rec["ranges"]]
+    return out
+
+
+def _vhdl_parameter(p: dict) -> dict:
+    """A VHDL generic or constant, in the SystemVerilog parameter shape."""
+    expr = p.get("expression") or p.get("default_expression") or {}
+    out = {"name": p["name"], "kind": p.get("kind"), "owner": p.get("owner"),
+           "value": str(p["effective_value"]) if "effective_value" in p else None,
+           "expr": expr.get("text"), "localparam": p.get("kind") != "generic",
+           "src": _vhdl_src(p.get("source"))}
+    if p.get("overridden"):
+        out["overridden"] = True
+    return out
+
+
 class IntentUnavailable(ScopeError):
     """Raised when an intent query is made but the live AST link is absent."""
 
@@ -68,6 +133,10 @@ class IntentProvider:
         self.session = session
 
     @property
+    def _vhdl(self) -> bool:
+        return self.session.load_spec.get("language") == "vhdl"
+
+    @property
     def loaded(self) -> bool:
         return bool(naja.intentAvailable())
 
@@ -78,7 +147,10 @@ class IntentProvider:
         if "::" in ref:
             return self._package_record(ref)
         resolved = resolve_path(self.session, ref)[0]
-        rec = naja.intentTypeOf(self._intent_obj(resolved))
+        obj = self._intent_obj(resolved)
+        rec = naja.intentTypeOf(obj)
+        if rec is not None and self._vhdl:
+            rec = self._vhdl_value_type(obj, rec)
         if rec is None:
             return {"ref": ref, "label": resolved.path.split(".")[-1],
                     "note": (f"no source type recovered for {ref} (non-enum "
@@ -99,10 +171,13 @@ class IntentProvider:
         """Parameters + localparams of an instance/module, with their SYMBOLIC
         initializer text (lost in lowering) alongside the elaborated value."""
         rec = naja.intentParametersOf(self._resolve_instance_obj(ref))
-        if rec is None:
+        if rec is None or rec.get("status") == "unavailable":
             raise ScopeError(
                 f"{ref!r}: no parameters recovered (not an instance/module with "
                 "a source symbol, or the intent layer is not loaded).")
+        if self._vhdl:
+            return {"parameters": [_vhdl_parameter(p) for p in rec["params"]],
+                    "ref": ref}
         for p in rec.get("parameters", []):
             if "value" in p:
                 p["value"] = _decimal_value(p["value"])
@@ -117,6 +192,39 @@ class IntentProvider:
         if resolved.kind == "instance":
             return {"intent": "parameters", **self.get_parameters(ref)}
         return {"intent": "type", **self.get_type(ref)}
+
+    # -- VHDL records ---------------------------------------------------------
+
+    def _vhdl_value_type(self, obj, rec: dict) -> dict:
+        """Normalized type of a signal/port, plus what only its declaration
+        keeps: the source line and the symbolic constraint."""
+        out = _vhdl_type(rec)
+        desc = naja.intentDescribe(obj)
+        if desc.get("status") == "available":
+            out["src"] = _vhdl_src(desc.get("source"))
+            constraint = (desc.get("declared_type") or {}).get("constraint")
+            if constraint:
+                out["constraint"] = _vhdl_range(constraint)
+        return out
+
+    def _vhdl_package_record(self, ref: str, pkg: str, member: str) -> dict:
+        """Package members are reached from the designs that see them: VHDL
+        identifiers are case-insensitive, and naja keeps no name-keyed lookup."""
+        from . import snl
+        wanted = (pkg.lower(), member.lower())
+        for design in snl.iter_designs():
+            desc = naja.intentDescribe(design)
+            for decl in desc.get("declarations", []):
+                if (decl.get("owner_kind") == "package"
+                        and (decl["owner"].lower(), decl["name"].lower()) == wanted):
+                    if decl.get("kind") == "type":
+                        return {"name": decl["name"], "ref": ref,
+                                "src": _vhdl_src(decl.get("source")),
+                                **_vhdl_type(decl["resolved_type"])}
+                    return {**_vhdl_parameter(decl), "ref": ref}
+        raise ScopeError(
+            f"intent: {member!r} not found in package {pkg!r} (or no elaborated "
+            f"design uses that package) — {ref!r}")
 
     # -- resolution helpers --------------------------------------------------
 
@@ -145,6 +253,8 @@ class IntentProvider:
         """A package member (pkg::name) — name-keyed over the live compilation,
         since packages are not instantiated and have no SNL object."""
         pkg, _, member = ref.partition("::")
+        if self._vhdl:
+            return self._vhdl_package_record(ref, pkg, member)
         rec = naja.intentPackageMember(pkg, member)
         if rec is None:
             raise ScopeError(

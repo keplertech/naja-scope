@@ -198,9 +198,14 @@ VHDL loading is available in beta. Call
 explore its elaborated hierarchy and connectivity; the files may be listed in
 any order. A single path per call also works (load packages first);
 package-only files may return `top: null` until the top file is loaded. The frontend supports a restricted two-state RTL subset,
-and supported constructs may change. `get_intent`/`load_intent` remain
-SystemVerilog-only. `get_source` reads VHDL entity, port, signal, instance
-and process origins, including after snapshot reloads.
+and supported constructs may change. `get_source` reads VHDL entity, port,
+signal, instance and process origins, including after snapshot reloads.
+
+Pass `intent=True` to `load_vhdl`, or call `load_intent` afterwards, to query
+`get_intent` for enum literals and their encodings, record fields, generics,
+constants and symbolic ranges such as `WIDTH-1 downto 0`. Package members use
+`pkg::NAME`. Query the signal rather than its inferred flop, and note that
+record fields report widths, not bit positions.
 
 ---
 
