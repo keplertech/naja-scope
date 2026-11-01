@@ -104,8 +104,9 @@ class Session:
         return snl.top_node()
 
     @design_mutation
-    def load_vhdl(self, file: Union[str, List[str]], top: Optional[str] = None):
-        design = loader.load_vhdl(file, top=top)
+    def load_vhdl(self, file: Union[str, List[str]], top: Optional[str] = None,
+                  keep_ast_link: bool = False):
+        design = loader.load_vhdl(file, top=top, keep_ast_link=keep_ast_link)
         self._record_sources([file] if isinstance(file, str) else list(file))
         self.load_spec = {"language": "vhdl", "files": list(self.loaded_files),
                           "top": top}
@@ -118,8 +119,8 @@ class Session:
                     files: Optional[List[str]] = None,
                     top: Optional[str] = None,
                     env: Optional[dict] = None) -> "intent.IntentProvider":
-        """Make the warm intent layer available. If a SystemVerilog load already
-        retained the AST link, this is a no-op. Otherwise (loaded without intent,
+        """Make the warm intent layer available. If a load already retained the
+        AST link, this is a no-op. Otherwise (loaded without intent,
         or a cold snapshot) it re-elaborates the SAME design WITH the link, from
         the inputs captured at load (a snapshot does not carry them, so a cold
         session must have the flist/files in load_spec or pass them here).
@@ -127,9 +128,6 @@ class Session:
         Re-elaboration is cheap (~12s cva6-small / ~29s cva6-full). The exact
         relink-without-re-elaboration tier is not yet implemented.
         """
-        if self.load_spec.get("language") == "vhdl":
-            raise ScopeError("The intent layer is SystemVerilog-only; "
-                             "VHDL beta sessions do not support load_intent.")
         if naja.intentAvailable():
             return self.intent
         spec = self.load_spec or {}
@@ -149,6 +147,16 @@ class Session:
         if env:
             for k, v in env.items():
                 os.environ[k] = v
+        if spec.get("language") == "vhdl":
+            if flist:
+                raise ScopeError("load_intent takes files=, not flist=, for a "
+                                 "VHDL session.")
+            # One batch: units resolve in any order, however they were first
+            # loaded call by call.
+            loader.reset_universe()
+            self.__init__()
+            self.load_vhdl(files, top=top, keep_ast_link=True)
+            return self.intent
         # A fresh elaboration WITH the AST link, replacing the current universe.
         loader.reset_universe()
         self.__init__()

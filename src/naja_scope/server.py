@@ -223,6 +223,11 @@ def load_vhdl(
         Optional[str],
         Field(description="Top entity name; omit to infer the top."),
     ] = None,
+    intent: Annotated[
+        bool,
+        Field(description="Retain VHDL source intent for get_intent; the last "
+                          "load_vhdl call decides whether it stays live."),
+    ] = False,
 ) -> dict:
     """Load VHDL into the active session (beta, restricted two-state RTL subset).
     Prefer passing every file of the design as one list (any order; units are
@@ -231,10 +236,11 @@ def load_vhdl(
     return top=null.
     Use hierarchy, cards and connectivity queries on the elaborated design.
     Use get_source for entity, port, signal, instance and process source
-    references. SystemVerilog intent recovery is unavailable.
+    references. intent=True enables get_intent for enum literals, record
+    fields, generics and symbolic ranges.
     Unsupported constructs may fail during beta development.
     Returns the top summary when elaborated, language and beta status."""
-    return api.load_vhdl(file, top)
+    return api.load_vhdl(file, top, intent)
 
 
 @_tool(annotations=SESSION_MUTATION)
@@ -550,10 +556,10 @@ def get_intent(
     ] = "auto",
 ) -> dict:
     """Retrieve source-level intent that netlist lowering erases (warm-only).
-    Use when the answer is in the SystemVerilog *type/declaration*, not the
-    flattened gates: enum/typedef state names + encodings (incl. PACKAGE
-    typedefs whose members live in another file), and symbolic PARAMETER
-    expressions (the formula behind a baked-in width).
+    Use when the answer is in the SystemVerilog or VHDL *type/declaration*, not
+    the flattened gates: enum/typedef state names + encodings (incl. PACKAGE
+    typedefs whose members live in another file), and symbolic PARAMETER or
+    generic expressions (the formula behind a baked-in width).
     ref: a hierarchical path ('cva6.csr_regfile_i.priv_lvl_q'), a package member
     ('riscv::PLEN'), or an instance path for its parameters.
     want: auto | type | fsm_states | parameters. If the intent layer is not
@@ -565,20 +571,20 @@ def get_intent(
 def load_intent(
     flist: Annotated[
         Optional[str],
-        Field(description="SystemVerilog file-list path; omit to reuse captured load inputs."),
+        Field(description="SystemVerilog file-list path (not VHDL); omit to reuse captured load inputs."),
     ] = None,
     files: Annotated[
         Optional[List[str]],
-        Field(description="SystemVerilog source paths; omit to reuse captured load inputs."),
+        Field(description="RTL source paths; omit to reuse captured load inputs."),
     ] = None,
     top: Annotated[
         Optional[str],
-        Field(description="Top module name; omit to reuse the captured or inferred top."),
+        Field(description="Top module/entity name; omit to reuse the captured or inferred top."),
     ] = None,
 ) -> dict:
     """Make the warm source-intent layer available for get_intent. Use after a
-    SystemVerilog load that did not retain intent; do not call for VHDL or gate-level
-    Verilog, and prefer `load_systemverilog(intent=True)` on the initial load.
+    SystemVerilog or VHDL load that did not retain intent; do not call for
+    gate-level Verilog, and prefer `intent=True` on the initial load.
     This is a no-op when the link is already live; otherwise it replaces the
     active universe by re-elaborating from explicit or captured `flist`/`files`.
     Returns `intent_loaded`; missing inputs produce a structured error."""

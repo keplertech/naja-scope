@@ -39,12 +39,11 @@ def test_load_and_query(vhdl_file):
     assert result["beta"] is True
     assert result["top"]["model"] == "wire_top"
     assert result["top"]["terms"] == 2
-    assert api.status()["intent_loadable"] is False
+    assert result["intent_loaded"] is False
+    assert api.status()["intent_loadable"] is True
     assert api.get_hierarchy()["root"]["model"] == "wire_top"
     ports = api.get_module_card("wire_top")["ports"]
     assert {p["name"] for p in ports} == {"a", "y"}
-    with pytest.raises(ScopeError, match="SystemVerilog-only"):
-        api.load_intent()
     assert api.status()["top"]["model"] == "wire_top"
 
 
@@ -107,18 +106,18 @@ end architecture;
     assert {p: api.get_source(p, context_lines=0) for p in sources} == sources
 
 
-def test_snapshot_preserves_vhdl_intent_guard(tmp_path, vhdl_file, monkeypatch):
+def test_snapshot_reload_brings_vhdl_intent_back(tmp_path, vhdl_file, monkeypatch):
     with pytest.warns(RuntimeWarning, match="Beta"):
         api.load_vhdl(vhdl_file)
     snapshot = str(tmp_path / "snapshot")
     api.save_snapshot(snapshot)
     SESSION.reset()
     monkeypatch.setenv("NAJA_SCOPE_INTENT", "1")
-    result = api.load_snapshot(snapshot)
-    assert result["intent_loaded"] is False
-    assert "SystemVerilog-only" in result["intent_note"]
-    assert api.status()["intent_loadable"] is False
-    assert api.status()["top"]["model"] == "wire_top"
+    with pytest.warns(RuntimeWarning, match="Beta"):
+        result = api.load_snapshot(snapshot)
+    assert result["intent_loaded"] is True
+    assert api.status()["intent_loadable"] is True
+    assert api.get_intent("wire_top.a", want="type")["type"] == "std_logic"
 
 
 def test_signal_and_inferred_register_source_roundtrip(tmp_path):
