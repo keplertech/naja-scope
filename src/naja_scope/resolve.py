@@ -244,23 +244,30 @@ def resolve_path(session, path: str,
 
     node = top
     prefix = top_name
-    for i, segment in enumerate(segments):
-        is_last = i == len(segments) - 1
-        matches = _match_segment(node, segment, is_last, prefix)
-        if not matches:
-            raise ResolveError(path, segment, _suggest(segment, node))
-        if not is_last:
+    i = 0
+    while i < len(segments):
+        for end in range(i + 1, len(segments) + 1):
+            # VHDL generate labels put dots inside one instance name, so a
+            # segment that matches nothing may continue into the next ones.
+            segment = ".".join(segments[i:end])
+            is_last = end == len(segments)
+            matches = _match_segment(node, segment, is_last, prefix)
+            if is_last:
+                if matches and kind:
+                    matches = [m for m in matches if m.kind == kind]
+                    if not matches:
+                        raise ResolveError(path, segment, _suggest(segment, node))
+                if matches:
+                    return matches
+                continue
             inst_matches = [m for m in matches if m.kind == "instance"]
-            if not inst_matches:
-                raise ResolveError(path, segment, _suggest(segment, node))
-            node = inst_matches[0].obj
-            prefix = inst_matches[0].path
+            if inst_matches:
+                node = inst_matches[0].obj
+                prefix = inst_matches[0].path
+                i = end
+                break
         else:
-            if kind:
-                matches = [m for m in matches if m.kind == kind]
-                if not matches:
-                    raise ResolveError(path, segment, _suggest(segment, node))
-            return matches
+            raise ResolveError(path, segments[i], _suggest(segments[i], node))
     raise ResolveError(path, segments[-1])
 
 

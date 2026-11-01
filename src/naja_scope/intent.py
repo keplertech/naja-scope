@@ -79,26 +79,37 @@ def _vhdl_type_name(rec: dict) -> str | None:
     return rec.get("name")
 
 
+def _vhdl_enum(rec: dict) -> dict:
+    width = rec.get("width", 0)
+    return {"width": width,
+            "decl": _vhdl_src((rec.get("declaration") or {}).get("source")),
+            "members": [{"name": m["name"], "ordinal": m["ordinal"],
+                         "encoding": format(m["representation"], f"0{width}b")}
+                        for m in rec.get("literals", [])]}
+
+
+def _vhdl_field(field: dict) -> dict:
+    rec = field.get("type", {})
+    out = {"name": field["name"], "type": _vhdl_type_name(rec),
+           "width": rec.get("width")}
+    # VHDL FSMs often keep their state in a record field.
+    if rec.get("kind") == "enumeration":
+        out["enum"] = _vhdl_enum(rec)
+    return out
+
+
 def _vhdl_type(rec: dict) -> dict:
     """A naja VHDL resolved type, in the SystemVerilog get_type shape."""
     kind = {"enumeration": "enum"}.get(rec.get("kind"), rec.get("kind"))
     out = {"type": _vhdl_type_name(rec), "canonical_kind": kind,
            "width": rec.get("width")}
-    decl = _vhdl_src((rec.get("declaration") or {}).get("source"))
     if kind == "enum":
-        width = rec.get("width", 0)
-        out["enum"] = {
-            "width": width, "decl": decl,
-            "members": [{"name": m["name"], "ordinal": m["ordinal"],
-                         "encoding": format(m["representation"], f"0{width}b")}
-                        for m in rec.get("literals", [])]}
+        out["enum"] = _vhdl_enum(rec)
     elif kind == "record":
         out["struct"] = {
-            "width": rec.get("width"), "decl": decl,
-            "fields": [{"name": f["name"],
-                        "type": f.get("type", {}).get("name"),
-                        "width": f.get("type", {}).get("width")}
-                       for f in rec.get("fields", [])]}
+            "width": rec.get("width"),
+            "decl": _vhdl_src((rec.get("declaration") or {}).get("source")),
+            "fields": [_vhdl_field(f) for f in rec.get("fields", [])]}
     if rec.get("ranges"):
         out["ranges"] = [_vhdl_range(r) for r in rec["ranges"]]
     return out
@@ -162,7 +173,8 @@ class IntentProvider:
         """Enum members+encodings for an enum-typed register (the FSM-state /
         package-typedef-enum gate). Notes clearly when the ref is not enum."""
         rec = self.get_type(ref)
-        if "enum" not in rec:
+        fields = rec.get("struct", {}).get("fields", [])
+        if "enum" not in rec and not any("enum" in f for f in fields):
             rec.setdefault("note", (f"{ref} is not enum-typed "
                                     f"(type {rec.get('type', '?')}); no FSM states."))
         return rec
@@ -176,7 +188,10 @@ class IntentProvider:
                 f"{ref!r}: no parameters recovered (not an instance/module with "
                 "a source symbol, or the intent layer is not loaded).")
         if self._vhdl:
-            return {"parameters": [_vhdl_parameter(p) for p in rec["params"]],
+            # A design sees whole packages; those stay reachable as pkg::NAME.
+            own = [p for p in rec["params"] if p.get("owner_kind") != "package"]
+            return {"parameters": [_vhdl_parameter(p) for p in own],
+                    "package_constants_omitted": len(rec["params"]) - len(own),
                     "ref": ref}
         for p in rec.get("parameters", []):
             if "value" in p:
@@ -187,7 +202,9 @@ class IntentProvider:
     def describe(self, ref: str) -> dict:
         """Auto-dispatch on the ref's kind, matching get_intent(want='auto')."""
         if "::" in ref:
-            return {"intent": "parameter", **self._package_record(ref)}
+            rec = self._package_record(ref)
+            return {"intent": "type" if "canonical_kind" in rec else "parameter",
+                    **rec}
         resolved = resolve_path(self.session, ref)[0]
         if resolved.kind == "instance":
             return {"intent": "parameters", **self.get_parameters(ref)}

@@ -151,3 +151,11 @@ requires 0.7.34 and adapts the removed default_timescale raw keyword via the
 frontend file list. VHDL intent exists in the engine and passes a raw smoke
 check, but is not yet integrated into naja-scope. See
 `docs/validation/najaeda-0.7.34.md`. No publication was performed.
+
+### 2026-11-01 recheck for the 0.1.23 candidate
+
+Latest release, master (`742dc82a0c706e0a3bfb98b709fd3ee06d50d12a`) and najaeda
+0.7.34 are unchanged, and CVA6 #3594 is open with two comments, so master was
+not retried. Retain v5.3.0. All three regressions pass on a fresh RV32 snapshot.
+Naja-scope now exposes VHDL intent, superseding the 0.7.34 note above, validated
+on NEORV32. See `docs/releases/0.1.23.md`. No publication was performed.

@@ -228,6 +228,12 @@ def load_vhdl(
         Field(description="Retain VHDL source intent for get_intent; the last "
                           "load_vhdl call decides whether it stays live."),
     ] = False,
+    library: Annotated[
+        Optional[str],
+        Field(description="VHDL library the files compile into, for designs "
+                          "that name it, as in `library neorv32;`. Omit for "
+                          "designs that use `work`."),
+    ] = None,
 ) -> dict:
     """Load VHDL into the active session (beta, restricted two-state RTL subset).
     Prefer passing every file of the design as one list (any order; units are
@@ -240,7 +246,7 @@ def load_vhdl(
     fields, generics and symbolic ranges.
     Unsupported constructs may fail during beta development.
     Returns the top summary when elaborated, language and beta status."""
-    return api.load_vhdl(file, top, intent)
+    return api.load_vhdl(file, top, intent, library)
 
 
 @_tool(annotations=SESSION_MUTATION)
