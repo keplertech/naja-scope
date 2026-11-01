@@ -52,10 +52,10 @@ fix. See the
 [0.1.21 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.21.md)
 for test results and snapshot migration requirements.
 
-Works on **RTL and gate-level netlists** alike — load elaborated SystemVerilog,
-or a post-synthesis structural Verilog netlist plus its Liberty standard-cell
-library (see [Gate-level designs](#gate-level-designs)). VHDL loading is in
-[beta](#vhdl-beta).
+Works on **RTL and gate-level netlists** alike — load elaborated SystemVerilog
+or VHDL ([beta](#vhdl-beta)), or a post-synthesis structural Verilog netlist
+plus its Liberty standard-cell library (see
+[Gate-level designs](#gate-level-designs)).
 
 `get_module_card` reports direct-child register bits and inferred RAM/ROM
 summaries: width, depth, capacity in bits, read/write port counts, and
