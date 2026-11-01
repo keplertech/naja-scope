@@ -8,11 +8,11 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Glama quality](https://glama.ai/mcp/servers/najaeda/naja-scope/badges/score.svg)](https://glama.ai/mcp/servers/najaeda/naja-scope)
 
-**Let your AI assistant explore SystemVerilog designs — without pasting source code into the chat.**
+**Let your AI assistant explore SystemVerilog and VHDL designs — without pasting source code into the chat.**
 
 naja-scope is an [MCP](https://modelcontextprotocol.io) server that gives AI
 agents (Claude, and any MCP-compatible assistant) a precise, structured view of
-your elaborated SystemVerilog design. Instead of dumping thousands of lines of
+your elaborated SystemVerilog or VHDL design. Instead of dumping thousands of lines of
 RTL into the model's context, the agent asks targeted questions — *what drives
 this signal? what's inside this module? where does this net come from?* — and
 gets back small, exact answers with file-and-line references.
@@ -54,11 +54,10 @@ fix. See the
 [0.1.21 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.21.md)
 for test results and snapshot migration requirements.
 
-Works on **RTL and gate-level netlists** alike: load elaborated SystemVerilog,
-or load a post-synthesis structural Verilog netlist together with its Liberty
+Works on **RTL and gate-level netlists** alike: load elaborated SystemVerilog
+or VHDL ([beta](#vhdl-beta)), or load a post-synthesis structural Verilog netlist together with its Liberty
 standard-cell library and navigate the gates the same way (see
-[Gate-level designs](#gate-level-designs)). VHDL loading is in
-[beta](#vhdl-beta).
+[Gate-level designs](#gate-level-designs)).
 
 All responses are token-bounded: lists paginate, large results truncate with
 clear markers. Your context stays small; your answers stay accurate.
@@ -220,11 +219,16 @@ package-only files may return `top: null` until the top file is loaded. The fron
 and supported constructs may change. `get_source` reads VHDL entity, port,
 signal, instance and process origins, including after snapshot reloads.
 
+Designs that name their library, as in `library neorv32;`, need
+`library="neorv32"` on the load.
+
 Pass `intent=True` to `load_vhdl`, or call `load_intent` afterwards, to query
-`get_intent` for enum literals and their encodings, record fields, generics,
-constants and symbolic ranges such as `WIDTH-1 downto 0`. Package members use
-`pkg::NAME`. Query the signal rather than its inferred flop, and note that
-record fields report widths, not bit positions.
+`get_intent` for enum literals and their encodings, including FSM states held
+in record fields, record fields, generics, and symbolic ranges such as
+`WIDTH-1 downto 0`. Package members use `pkg::NAME`, and an instance's parameter
+list leaves them out. Query the signal rather than its inferred flop, and note
+that record fields report widths, not bit positions. Validated on the
+[NEORV32](https://github.com/stnolting/neorv32) SoC.
 
 ---
 
@@ -239,7 +243,7 @@ Once a design is loaded, your assistant can:
 - **Get drivers / loads** of a net — the real endpoints, across hierarchy;
   literal drivers preserve four-state `0` / `1` / `X` / `Z` values.
 - **Trace logic cones** (fan-in / fan-out) and see the register frontier.
-- **Get source** — the exact SystemVerilog lines behind any object.
+- **Get source** — the exact source lines behind any object.
 - **Get a module card** — ports, counts, clock/reset at a glance.
 - **Recover design intent** — state-machine names, struct fields, parameter
   expressions lost during elaboration.

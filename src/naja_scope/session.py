@@ -105,11 +105,12 @@ class Session:
 
     @design_mutation
     def load_vhdl(self, file: Union[str, List[str]], top: Optional[str] = None,
-                  keep_ast_link: bool = False):
-        design = loader.load_vhdl(file, top=top, keep_ast_link=keep_ast_link)
+                  keep_ast_link: bool = False, library: Optional[str] = None):
+        design = loader.load_vhdl(file, top=top, keep_ast_link=keep_ast_link,
+                                  library=library)
         self._record_sources([file] if isinstance(file, str) else list(file))
         self.load_spec = {"language": "vhdl", "files": list(self.loaded_files),
-                          "top": top}
+                          "top": top, "library": library}
         return snl.top_node() if design is not None else None
 
     # -- intent layer --------------------------------------------------------
@@ -144,18 +145,26 @@ class Session:
                 "load_intent needs a flist or files to elaborate the intent "
                 "layer (warm load); a cold snapshot does not carry them — pass "
                 "flist=/files=. Cold relink-without-re-elaboration is deferred.")
+        if spec.get("language") == "vhdl" and flist:
+            raise ScopeError("load_intent takes files=, not flist=, for a "
+                             "VHDL session.")
+        # Re-elaboration destroys the universe first: a moved source must not
+        # cost the design the session already holds.
+        missing = [p for p in [*(files or []), *([flist] if flist else [])]
+                   if not os.path.isfile(p)]
+        if missing:
+            raise ScopeError("load_intent cannot re-elaborate, source files "
+                             f"are missing: {missing[:5]}")
         if env:
             for k, v in env.items():
                 os.environ[k] = v
         if spec.get("language") == "vhdl":
-            if flist:
-                raise ScopeError("load_intent takes files=, not flist=, for a "
-                                 "VHDL session.")
             # One batch: units resolve in any order, however they were first
             # loaded call by call.
             loader.reset_universe()
             self.__init__()
-            self.load_vhdl(files, top=top, keep_ast_link=True)
+            self.load_vhdl(files, top=top, keep_ast_link=True,
+                           library=spec.get("library"))
             return self.intent
         # A fresh elaboration WITH the AST link, replacing the current universe.
         loader.reset_universe()

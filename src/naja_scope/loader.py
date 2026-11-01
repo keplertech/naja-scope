@@ -158,7 +158,7 @@ def load_verilog(files: List[str], keep_assigns: bool = True,
 
 
 def load_vhdl(file: Union[str, List[str]], top: Optional[str] = None,
-              keep_ast_link: bool = False):
+              keep_ast_link: bool = False, library: Optional[str] = None):
     """Load one VHDL source, or a batch, through the raw beta frontend.
 
     A batch (najaeda>=0.7.29) may list files in any order: units are resolved,
@@ -174,11 +174,14 @@ def load_vhdl(file: Union[str, List[str]], top: Optional[str] = None,
             raise ScopeError(f"VHDL source file not found: {path}")
     if top == "":
         raise ScopeError("VHDL top must not be empty; omit it to infer the top.")
+    if library == "":
+        raise ScopeError("VHDL library must not be empty; omit it for the default.")
+    options = {"library": library} if library else {}
     db = get_top_db()
     try:
         return db.loadVHDL(files if len(files) > 1 else files[0], top=top,
                            diagnostics_report_path=None,
-                           keep_ast_link=keep_ast_link)
+                           keep_ast_link=keep_ast_link, **options)
     except RuntimeError as exc:
         raise ScopeError(f"VHDL beta loading failed: {exc}") from exc
 

@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.keplertech/naja-scope",
   "title": "naja-scope",
-  "description": "Let AI agents explore SystemVerilog/Verilog designs: trace connectivity, hierarchy, source.",
+  "description": "Let AI agents explore SystemVerilog, Verilog and VHDL designs: connectivity, hierarchy, source.",
   "repository": {
     "url": "https://github.com/keplertech/naja-scope",
     "source": "github"
   },
-  "version": "0.1.22",
+  "version": "0.1.23",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "naja-scope",
-      "version": "0.1.22",
+      "version": "0.1.23",
       "transport": {
         "type": "stdio"
       }

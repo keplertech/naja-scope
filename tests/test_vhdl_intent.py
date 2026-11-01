@@ -2,6 +2,7 @@
 """VHDL intent through the public API: naja's VHDL records, normalized to the
 get_intent shape, and the same load/reload lifecycle as SystemVerilog."""
 import asyncio
+import os
 
 import pytest
 
@@ -134,7 +135,7 @@ def test_non_enum_fsm_query_notes(loaded):
     assert "not enum-typed" in rec["note"]
 
 
-def test_generic_override_and_visible_constant(loaded):
+def test_generic_override_omits_package_constants(loaded):
     rec = api.get_intent("fsm_top.u0")
     assert rec["intent"] == "parameters"
     params = {p["name"]: p for p in rec["parameters"]}
@@ -142,8 +143,8 @@ def test_generic_override_and_visible_constant(loaded):
     assert params["N"]["expr"] == "3"
     assert params["N"]["overridden"] is True
     assert params["N"]["localparam"] is False
-    assert params["WIDTH"]["owner"] == "fsm_pkg"
-    assert params["WIDTH"]["localparam"] is True
+    assert "WIDTH" not in params
+    assert rec["package_constants_omitted"] == 1
 
 
 def test_package_members_any_case(loaded):
@@ -218,3 +219,115 @@ def test_tool_schema_exposes_intent():
     tools = asyncio.run(server.mcp.list_tools())
     tool = next(t for t in tools if t.name == "load_vhdl")
     assert "intent" in tool.inputSchema["properties"]
+
+
+def test_moved_sources_keep_the_snapshot_design(sources, tmp_path, monkeypatch):
+    with pytest.warns(RuntimeWarning, match="Beta"):
+        api.load_vhdl(list(sources), top="fsm_top")
+    snapshot = str(tmp_path / "snapshot")
+    api.save_snapshot(snapshot)
+    SESSION.reset()
+    os.remove(sources[1])
+    monkeypatch.setenv("NAJA_SCOPE_INTENT", "1")
+    result = api.load_snapshot(snapshot)
+    assert result["intent_loaded"] is False
+    assert "missing" in result["intent_note"]
+    assert api.status()["top"]["model"] == "fsm_top"
+
+
+def test_package_type_is_labelled_a_type(loaded):
+    assert api.get_intent("fsm_pkg::state_t")["intent"] == "type"
+    assert api.get_intent("fsm_pkg::WIDTH")["intent"] == "parameter"
+
+
+NESTED = """
+library ieee;
+use ieee.std_logic_1164.all;
+entity leaf is
+  port (a : in std_logic; y : out std_logic);
+end entity;
+architecture rtl of leaf is
+  signal hold : std_logic;
+begin
+  hold <= a;
+  y <= hold;
+end architecture;
+
+library ieee;
+use ieee.std_logic_1164.all;
+entity gen_top is
+  port (clk, a : in std_logic; y : out std_logic);
+end entity;
+architecture rtl of gen_top is
+  type phase_t is (P_IDLE, P_BUSY);
+  type ctl_t is record
+    state : phase_t;
+    done : std_logic;
+  end record;
+  signal ctl : ctl_t;
+begin
+  block_gen : if true generate
+    inner_gen : for i in 0 to 0 generate
+      u_leaf : entity work.leaf port map (a => a, y => y);
+    end generate;
+  end generate;
+  process(clk) begin
+    if rising_edge(clk) then
+      ctl.done <= a;
+      if ctl.state = P_IDLE then ctl.state <= P_BUSY; else ctl.state <= P_IDLE; end if;
+    end if;
+  end process;
+end architecture;
+"""
+
+
+def test_paths_through_generate_labels_and_record_fsm(tmp_path):
+    source = tmp_path / "nested.vhd"
+    source.write_text(NESTED)
+    with pytest.warns(RuntimeWarning, match="Beta"):
+        api.load_vhdl(str(source), top="gen_top", intent=True)
+    children = [c["name"] for c in api.get_hierarchy()["root"]["children"]]
+    leaf = next(name for name in children if name.endswith("u_leaf"))
+    assert "." in leaf
+    assert api.resolve(f"gen_top.{leaf}")["matches"][0]["model"] == "leaf"
+    assert api.get_intent(f"gen_top.{leaf}.hold", want="type")["type"] == "std_logic"
+    assert api.resolve(f"gen_top.{leaf}.y")["matches"][0]["kind"] == "term"
+    assert "text" in api.get_source(f"gen_top.{leaf}.hold", context_lines=0)
+    rec = api.get_intent("gen_top.ctl", want="fsm_states")
+    assert "note" not in rec
+    state = next(f for f in rec["struct"]["fields"] if f["name"] == "state")
+    assert [m["name"] for m in state["enum"]["members"]] == ["P_IDLE", "P_BUSY"]
+    assert "enum" not in next(f for f in rec["struct"]["fields"] if f["name"] == "done")
+
+
+def test_library_named_by_the_design(tmp_path):
+    package = tmp_path / "p.vhd"
+    package.write_text("package p is\n constant W : integer := 1;\nend package;\n")
+    design = tmp_path / "t.vhd"
+    design.write_text("""
+library ieee, mylib;
+use ieee.std_logic_1164.all;
+use mylib.p.all;
+entity t is
+  port (a : in std_logic; y : out std_logic);
+end entity;
+architecture rtl of t is
+begin
+  y <= a;
+end architecture;
+""")
+    files = [str(package), str(design)]
+    with pytest.warns(RuntimeWarning, match="Beta"):
+        with pytest.raises(ScopeError, match="missing VHDL library"):
+            api.load_vhdl(files, top="t")
+    SESSION.reset()
+    with pytest.warns(RuntimeWarning, match="Beta"):
+        assert api.load_vhdl(files, top="t", library="mylib")["top"]["model"] == "t"
+    snapshot = str(tmp_path / "snapshot")
+    api.save_snapshot(snapshot)
+    SESSION.reset()
+    # Intent re-elaboration needs the library back from the snapshot metadata.
+    with pytest.warns(RuntimeWarning, match="Beta"):
+        assert api.load_snapshot(snapshot, intent=True)["intent_loaded"] is True
+    assert api.get_intent("mylib_not_used::W").get("error")
+    assert api.get_intent("p::W")["value"] == "1"

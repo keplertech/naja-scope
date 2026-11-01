@@ -150,10 +150,10 @@ def load_verilog(files: List[str], keep_assigns: bool = True,
 
 @serialized
 def load_vhdl(file: Union[str, List[str]], top: Optional[str] = None,
-              intent: bool = False) -> dict:
+              intent: bool = False, library: Optional[str] = None) -> dict:
     """Load one VHDL file, or a batch in any order, with najaeda's beta frontend."""
     want = bool(intent or _auto_intent())
-    node = SESSION.load_vhdl(file, top=top, keep_ast_link=want)
+    node = SESSION.load_vhdl(file, top=top, keep_ast_link=want, library=library)
     out = {"top": _summary(node) if node is not None else None,
            "language": "vhdl", "beta": True,
            "intent_loaded": SESSION.intent_available}
