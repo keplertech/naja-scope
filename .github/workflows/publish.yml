@@ -12,6 +12,11 @@ on:
     tags:
       - v*
   workflow_dispatch:
+    inputs:
+      mcp_registry:
+        description: Publish server.json to the official MCP Registry
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -92,6 +97,39 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@v1.14.0
         with:
           skip-existing: true
+
+  # Publish server.json to the official MCP Registry. GitHub OIDC login is
+  # required: the interactive `mcp-publisher login github` flow cannot read
+  # organization roles, so it cannot publish under io.github.keplertech.
+  mcp-registry:
+    name: Publish to MCP Registry
+    needs: [build, pypi]
+    if: >-
+      !cancelled() &&
+      github.repository == 'keplertech/naja-scope' &&
+      needs.build.result == 'success' &&
+      (needs.pypi.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && inputs.mcp_registry))
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
+            | tar xz mcp-publisher
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate
+
+      - name: Log in with GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish
 
   # A GitHub Release (not just the tag) is what Glama's Auto-Release
   # listens to, so every published tag also gets a Release.
