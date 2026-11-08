@@ -6,7 +6,10 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/naja-scope.svg)](https://pypi.org/project/naja-scope/)
 [![CI](https://github.com/keplertech/naja-scope/actions/workflows/ci.yml/badge.svg)](https://github.com/keplertech/naja-scope/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Glama quality](https://glama.ai/mcp/servers/najaeda/naja-scope/badges/score.svg)](https://glama.ai/mcp/servers/najaeda/naja-scope)
+[![Glama quality](https://glama.ai/mcp/servers/keplertech/naja-scope/badges/score.svg)](https://glama.ai/mcp/servers/keplertech/naja-scope)
+
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_naja--scope-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=naja-scope&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22naja-scope%22%5D%7D)
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=naja-scope&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJuYWphLXNjb3BlIl19)
 
 **Let your AI assistant explore SystemVerilog and VHDL designs — without pasting source code into the chat.**
 
@@ -25,9 +28,12 @@ Built on the [najaeda](https://github.com/najaeda/naja) netlist engine.
 > less input.** [How it was measured ↓](#does-it-actually-help)
 
 ```sh
-pip install naja-scope
-claude mcp add naja-scope -- naja-scope-mcp
+claude mcp add naja-scope -- uvx naja-scope
 ```
+
+No separate install step: [`uvx`](https://docs.astral.sh/uv/) fetches naja-scope
+and najaeda from PyPI on first launch. The buttons above do the same for VS Code
+and Cursor. Prefer pip? See [Install](#install).
 
 ![naja-scope demo: a real Claude Code session tracing drivers and a fan-in cone on a UART design, using only naja-scope tools](docs/demo/naja-scope-demo.gif)
 
@@ -107,7 +113,8 @@ naja-scope-mcp                # stdio MCP server
 ## Connect it to Claude Code
 
 ```sh
-claude mcp add naja-scope -- naja-scope-mcp
+claude mcp add naja-scope -- uvx naja-scope      # with uv, no install step
+claude mcp add naja-scope -- naja-scope-mcp      # after pip install naja-scope
 ```
 
 Or add it to any MCP client's config:
@@ -116,11 +123,14 @@ Or add it to any MCP client's config:
 {
   "mcpServers": {
     "naja-scope": {
-      "command": "naja-scope-mcp"
+      "command": "uvx",
+      "args": ["naja-scope"]
     }
   }
 }
 ```
+
+(With a pip install, use `"command": "naja-scope-mcp"` and no `args`.)
 
 Then just ask your assistant to load a design and start exploring:
 
