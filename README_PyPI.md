@@ -5,6 +5,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/naja-scope.svg)](https://pypi.org/project/naja-scope/)
 [![Python versions](https://img.shields.io/pypi/pyversions/naja-scope.svg)](https://pypi.org/project/naja-scope/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/keplertech/naja-scope/blob/main/LICENSE)
+[![Install in VS Code](https://raw.githubusercontent.com/keplertech/naja-scope/main/docs/images/badges/install-vscode.svg)](https://insiders.vscode.dev/redirect/mcp/install?name=naja-scope&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22naja-scope%22%5D%7D)
+[![Install in Cursor](https://raw.githubusercontent.com/keplertech/naja-scope/main/docs/images/badges/install-cursor.svg)](https://cursor.com/en/install-mcp?name=naja-scope&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJuYWphLXNjb3BlIl19)
 
 **Let your AI assistant explore SystemVerilog and VHDL designs — without pasting source code into the chat.**
 
@@ -23,9 +25,12 @@ Built on the [najaeda](https://github.com/najaeda/naja) netlist engine.
 > less input.** [How it was measured](https://github.com/keplertech/naja-scope#does-it-actually-help)
 
 ```sh
-pip install naja-scope
-claude mcp add naja-scope -- naja-scope-mcp
+claude mcp add naja-scope -- uvx naja-scope
 ```
+
+No separate install step: [`uvx`](https://docs.astral.sh/uv/) fetches naja-scope
+and najaeda from PyPI on first launch. The buttons above do the same for VS Code
+and Cursor. Prefer pip? See [Install](#install).
 
 See it in action: [demo recording](https://github.com/keplertech/naja-scope#naja-scope).
 
@@ -132,7 +137,8 @@ That's it — `najaeda` and the MCP runtime come along automatically.
 ## Connect it to Claude Code
 
 ```sh
-claude mcp add naja-scope -- naja-scope-mcp
+claude mcp add naja-scope -- uvx naja-scope      # with uv, no install step
+claude mcp add naja-scope -- naja-scope-mcp      # after pip install naja-scope
 ```
 
 Or add it to any MCP client's config:
@@ -141,11 +147,14 @@ Or add it to any MCP client's config:
 {
   "mcpServers": {
     "naja-scope": {
-      "command": "naja-scope-mcp"
+      "command": "uvx",
+      "args": ["naja-scope"]
     }
   }
 }
 ```
+
+(With a pip install, use `"command": "naja-scope-mcp"` and no `args`.)
 
 Then just ask your assistant to load a design and start exploring:
 
