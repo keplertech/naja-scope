@@ -49,9 +49,8 @@ turns your design into something an agent can *navigate*:
 - 💡 **Recover design intent** — enum state names, struct/union fields, and
   parameter formulas that normally vanish when a design is elaborated.
 
-Requires **najaeda 0.7.33 or newer**, including the CVA6 RV32 elaboration
-fix. See the
-[0.1.21 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.21.md)
+Requires **najaeda 0.7.35 or newer**. See the
+[0.1.24 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.24.md)
 for test results and snapshot migration requirements.
 
 Works on **RTL and gate-level netlists** alike: load elaborated SystemVerilog
@@ -201,6 +200,17 @@ separate. Sequential cells without a state model are counted in
 counts remain explicit lower bounds when that count is nonzero. Memories
 are recognized from native naja primitives; opaque memory macros are not
 assigned an inferred capacity.
+
+## Content comparison
+
+`get_content_hash()` returns a versioned SHA-256 of the top model and its
+descendants; pass `module="uart_tx"` to hash one elaborated model. Use it to
+compare loaded content before and after snapshot reload or netlist edits.
+The response includes `format_version` and `naja_git_hash`; compare hashes only
+within the same format version and track the engine separately when primitive
+semantics matter. Names and IDs participate, while source metadata and
+primitive definitions are excluded. This is not functional equivalence.
+Hashing is explicit because large hierarchies can take time.
 
 ## SystemVerilog time units
 

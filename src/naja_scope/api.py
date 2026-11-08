@@ -433,6 +433,26 @@ def get_module_card(module: str) -> dict:
     return cards_mod.module_card(SESSION, module)
 
 
+@serialized
+def get_content_hash(module: Optional[str] = None) -> dict:
+    """Hash a model's live elaborated content, including descendant models.
+
+    This is an explicit query because hashing a large hierarchy can be costly.
+    Names and IDs participate; primitive definitions and source metadata do
+    not. Compare only hashes with the same format version, and track the engine
+    separately when primitive semantics matter. This is not HDL equivalence.
+    """
+    top = SESSION.require_top()
+    design = cards_mod.find_design(module) if module is not None else top.design
+    return {
+        "module": design.getName(),
+        "content_hash": design.getContentHash(),
+        "algorithm": "sha256",
+        "format_version": naja.getContentHashVersion(),
+        "naja_git_hash": naja.getGitHash(),
+    }
+
+
 def _model_label(name: str) -> str:
     return name or "(unnamed)"
 

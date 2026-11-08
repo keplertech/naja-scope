@@ -523,6 +523,21 @@ def get_module_card(
 
 
 @_tool(annotations=READ_ONLY)
+def get_content_hash(
+    module: Annotated[
+        Optional[str],
+        Field(description="Elaborated module/model name; omit for the top design."),
+    ] = None,
+) -> dict:
+    """Versioned SHA-256 of a model and its descendants, computed on demand.
+    Compare elaborated content across snapshots using the same format_version.
+    Names and IDs participate; source metadata and primitive definitions are
+    excluded. Track naja_git_hash separately for engine changes. This is not
+    functional equivalence. Large hierarchies can take time to hash."""
+    return api.get_content_hash(module)
+
+
+@_tool(annotations=READ_ONLY)
 def get_stats(
     path: Annotated[
         Optional[str],
