@@ -7,8 +7,8 @@
 [![CI](https://github.com/keplertech/naja-scope/actions/workflows/ci.yml/badge.svg)](https://github.com/keplertech/naja-scope/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Glama quality](https://glama.ai/mcp/servers/keplertech/naja-scope/badges/score.svg)](https://glama.ai/mcp/servers/keplertech/naja-scope)
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_naja--scope-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=naja-scope&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22naja-scope%22%5D%7D)
-[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_naja--scope-000000?logo=cursor&logoColor=white)](https://cursor.com/en/install-mcp?name=naja-scope&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJuYWphLXNjb3BlIl19)
+[![Install in VS Code](docs/images/badges/install-vscode.svg)](https://insiders.vscode.dev/redirect/mcp/install?name=naja-scope&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22naja-scope%22%5D%7D)
+[![Install in Cursor](docs/images/badges/install-cursor.svg)](https://cursor.com/en/install-mcp?name=naja-scope&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJuYWphLXNjb3BlIl19)
 
 **Let your AI assistant explore SystemVerilog and VHDL designs — without pasting source code into the chat.**
 
