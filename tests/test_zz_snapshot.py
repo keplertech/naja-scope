@@ -152,7 +152,7 @@ def test_server_tools_registered():
         "load_primitives", "save_snapshot", "load_snapshot",
         "reset_universe", "resolve", "find", "get_hierarchy",
         "get_drivers", "get_loads", "trace_cone", "get_source",
-        "get_module_card", "get_stats",
+        "get_module_card", "get_stats", "get_content_hash",
         "get_intent", "load_intent",
     }
     assert expected <= names, expected - names
@@ -172,7 +172,7 @@ def test_server_tools_registered():
     read_only = {
         "status", "resolve", "find", "get_hierarchy", "get_drivers",
         "get_loads", "trace_cone", "get_source", "get_module_card",
-        "get_stats", "get_intent", "get_schematic_selection",
+        "get_stats", "get_intent", "get_schematic_selection", "get_content_hash",
     }
     for name in read_only:
         assert tools_by_name[name].annotations.readOnlyHint is True

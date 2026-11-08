@@ -159,3 +159,19 @@ Latest release, master (`742dc82a0c706e0a3bfb98b709fd3ee06d50d12a`) and najaeda
 not retried. Retain v5.3.0. All three regressions pass on a fresh RV32 snapshot.
 Naja-scope now exposes VHDL intent, superseding the 0.7.34 note above, validated
 on NEORV32. See `docs/releases/0.1.23.md`. No publication was performed.
+
+### 2026-11-08 recheck with published najaeda 0.7.35
+
+Latest CVA6 release and master are unchanged: v5.3.0
+(`2ef1c1b1fca419354920c5487293bc605294904e`) and
+`742dc82a0c706e0a3bfb98b709fd3ee06d50d12a`. CVA6 #3594 remains open with two
+comments. Master was retried in a fresh isolated checkout with pinned
+submodules and published najaeda 0.7.35 (`c7ebdfc4f9f580684bf93998fcdc88e3009f2498`);
+only the MMU InvalidExpression at `cva6_mmu.sv:404` remains. Retain v5.3.0.
+Its RV32 fresh snapshot save/reload and all three unchanged regressions pass;
+the complete default RV64 and CORE-V-MCU demos pass unchanged. All 155 tests
+pass, none skipped. Prior snapshot caches and user checkouts were preserved.
+Naja-scope 0.1.24 requires 0.7.35 and exposes native model content hashing;
+timing/reset APIs were assessed but are not exposed as naja-scope tools.
+See `docs/releases/0.1.24.md` and `docs/validation/najaeda-0.7.35.md`.
+No publication was performed.
