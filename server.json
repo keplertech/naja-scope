@@ -3,10 +3,20 @@
   "name": "io.github.keplertech/naja-scope",
   "title": "naja-scope",
   "description": "Let AI agents explore SystemVerilog, Verilog and VHDL designs: connectivity, hierarchy, source.",
+  "websiteUrl": "https://github.com/keplertech/naja-scope#readme",
   "repository": {
     "url": "https://github.com/keplertech/naja-scope",
     "source": "github"
   },
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/keplertech/naja-scope/main/docs/images/naja-logo.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "346x320"
+      ]
+    }
+  ],
   "version": "0.1.24",
   "packages": [
     {
@@ -15,7 +25,8 @@
       "version": "0.1.24",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "runtimeHint": "uvx"
     }
   ]
 }
