@@ -8,6 +8,7 @@ the tool schemas agents pay tokens for on every session."""
 from __future__ import annotations
 
 import functools
+import json
 import os
 import sys
 from typing import Annotated, Any, Callable, Dict, List, Literal, Optional, Union
@@ -18,13 +19,29 @@ if _najaeda_src:
     sys.path.insert(0, _najaeda_src)
 
 from mcp.server.fastmcp import FastMCP
-from mcp.types import ToolAnnotations
+from mcp.types import TextContent, ToolAnnotations
 from pydantic import Field
 
 from . import api
 from .errors import ScopeError
 
-mcp = FastMCP("naja-scope")
+
+class CompactFastMCP(FastMCP):
+    """Keep dict tool output structured, with compact JSON for text clients."""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        result = await super().call_tool(name, arguments)
+        # FastMCP returns (content, structured_content) for our dict tools.
+        # Replace only the text rendering, preserving schemas and validation.
+        if isinstance(result, tuple):
+            _, structured = result
+            return ([TextContent(type="text", text=json.dumps(
+                structured, ensure_ascii=False, separators=(",", ":")))],
+                    structured)
+        return result
+
+
+mcp = CompactFastMCP("naja-scope")
 
 
 # MCP annotations complement the descriptions with machine-readable safety
@@ -70,6 +87,8 @@ ARBITRARY_PYTHON = ToolAnnotations(
 
 def _tool(*, annotations: ToolAnnotations) -> Callable:
     """Register fn as an MCP tool; ScopeErrors become structured responses."""
+    # Keep registered return annotations parameterized (Dict[str, Any]):
+    # FastMCP treats a bare dict annotation as unstructured text only.
 
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
@@ -87,7 +106,7 @@ def _tool(*, annotations: ToolAnnotations) -> Callable:
 @_tool(annotations=SESSION_MUTATION)
 def open_schematic(
     path: Annotated[Optional[str], Field(description="Instance path to focus; omit for the top.")] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Serve an interactive browser schematic of the current design. Returns a
     local URL to open on the MCP server's machine; requires the schematic extra.
     Uses the loaded design and supports anonymous #id instances."""
@@ -97,21 +116,21 @@ def open_schematic(
 @_tool(annotations=SESSION_MUTATION)
 def annotate_schematic(
     items: Annotated[List[dict], Field(description="Up to 200 annotations: path (scope path), kind (instance or term), severity (info, warning, error), message (up to 2000 characters). Whole pins/ports only; [] clears overlays.")],
-) -> dict:
+) -> Dict[str, Any]:
     """Replace schematic annotations on instances or pins/ports. Returns the
     local viewer URL and count. Annotations clear when the design changes."""
     return api.annotate_schematic(items)
 
 
 @_tool(annotations=READ_ONLY)
-def get_schematic_selection() -> dict:
+def get_schematic_selection() -> Dict[str, Any]:
     """Return the last browser-selected instance as a naja-scope path, or null.
     Use the returned path with module-card, source, or hierarchy tools."""
     return api.get_schematic_selection()
 
 
 @_tool(annotations=READ_ONLY)
-def status() -> dict:
+def status() -> Dict[str, Any]:
     """Inspect the current in-memory session without changing it. Use this
     before design queries to confirm a design is loaded and whether get_intent
     is live (`intent_loaded`) or can be reloaded (`intent_loadable`). Returns
@@ -163,7 +182,7 @@ def load_systemverilog(
         Field(description="Fallback time scale for modules without an explicit "
                           "time unit, e.g. 1ns/1ps; omit to use the frontend default."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Elaborate local SystemVerilog sources into the active design session.
     Use this for SystemVerilog RTL; use load_vhdl for VHDL (beta), or
     load_verilog with load_liberty/load_primitives for a
@@ -200,7 +219,7 @@ def load_verilog(
         Field(description="Decode Yosys `(* src = ... *)` attributes into "
                           "source origins pointing back to the RTL."),
     ] = False,
-) -> dict:
+) -> Dict[str, Any]:
     """Load local gate-level or structural Verilog into the active session.
     First call load_liberty for Liberty cells or load_primitives for built-ins;
     use load_systemverilog instead for RTL elaboration. Unknown modules fail
@@ -234,7 +253,7 @@ def load_vhdl(
                           "that name it, as in `library neorv32;`. Omit for "
                           "designs that use `work`."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Load VHDL into the active session (beta, restricted two-state RTL subset).
     Prefer passing every file of the design as one list (any order; units are
     resolved across files). Single-file calls still work: load package files
@@ -255,7 +274,7 @@ def load_liberty(
         List[str],
         Field(description="One or more local Liberty .lib file paths."),
     ],
-) -> dict:
+) -> Dict[str, Any]:
     """Register standard-cell models from local Liberty `.lib` files in the
     active session. Use this before load_verilog when a gate netlist instantiates
     those cells; use load_primitives instead for the built-in Xilinx or Yosys
@@ -273,7 +292,7 @@ def load_primitives(
         Optional[str],
         Field(description="Local Python file defining load(db); used only when name is omitted."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Register primitive models in the active session from either a built-in
     `name` (`xilinx` or `yosys`) or one local Python `file` defining `load(db)`.
     Provide one source; `name` takes precedence when both are set. A custom file
@@ -289,7 +308,7 @@ def save_snapshot(
         str,
         Field(description="Local destination directory for naja-if and metadata files."),
     ],
-) -> dict:
+) -> Dict[str, Any]:
     """Write the active design and source metadata to a local directory for
     fast reload. Use after loading a design; load_snapshot reads the result.
     Existing snapshot files in the directory may be overwritten. Snapshots are
@@ -307,7 +326,7 @@ def load_snapshot(
         bool,
         Field(description="Also rebuild the warm intent layer from saved elaboration inputs."),
     ] = False,
-) -> dict:
+) -> Dict[str, Any]:
     """Load a compatible save_snapshot directory into the active session in
     seconds instead of re-elaborating. Use load_systemverilog/load_verilog/load_vhdl when
     no compatible snapshot exists. The directory must match this najaeda version.
@@ -317,7 +336,7 @@ def load_snapshot(
 
 
 @_tool(annotations=SESSION_RESET)
-def reset_universe() -> dict:
+def reset_universe() -> Dict[str, Any]:
     """Discard the active design and all in-memory session state. Use before
     starting an unrelated design; do not use merely to inspect status. This is
     destructive to the current session but does not delete source or snapshots.
@@ -340,7 +359,7 @@ def resolve(
         Optional[int],
         Field(description="Maximum matches to return; defaults to 20 and is capped at 200."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Resolve a known hierarchical object path to instance, term, or net
     descriptors with source references. The final segment accepts a glob and
     bit selects (for example `top.u_uart.tx_o[0]`). Use find when the path is
@@ -361,14 +380,14 @@ def find(
     ] = "any",
     limit: Annotated[
         Optional[int],
-        Field(description="Page size; defaults to 50 and is capped at 200."),
+        Field(description="Page size; defaults to 20 and is capped at 200."),
     ] = None,
     cursor: Annotated[
         Optional[str],
         Field(description="Opaque next_cursor from the previous response; "
                           "omit for the first page."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Search case-sensitive object names across the loaded design with a glob.
     Use this when an exact path is unknown; use resolve once a path is known or
     get_hierarchy to browse structure. A dot in `pattern` switches matching to
@@ -395,7 +414,7 @@ def get_hierarchy(
         Optional[str],
         Field(description="Opaque root-level next_cursor from a previous response."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Browse the instance tree below `path` (or the top instance). Use this
     for structural children; use find for design-wide name search or get_stats
     for aggregate model counts. Lists only non-assign
@@ -414,9 +433,9 @@ def get_drivers(
     ],
     limit: Annotated[
         Optional[int],
-        Field(description="Maximum endpoint entries; defaults to 50 and is capped at 200."),
+        Field(description="Maximum endpoint entries; defaults to 20 and is capped at 200."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """List the immediate upstream endpoints that drive a term or net across
     hierarchy. Use this for direct sources; use get_loads for downstream readers
     or trace_cone for the transitive combinational fanin. Returns leaf drivers
@@ -424,7 +443,7 @@ def get_drivers(
     Lowered assign glue is traversed rather than reported as an endpoint.
     Literal assign drivers include `constant` (0, 1, X, or Z); bus entries
     include the driven `bit`.
-    Capped at limit (default 50, max 200) with a `truncated` flag; no cursor —
+    Capped at limit (default 20, max 200) with a `truncated` flag; no cursor —
     raise limit to see more."""
     return api.get_drivers(path, limit)
 
@@ -437,16 +456,16 @@ def get_loads(
     ],
     limit: Annotated[
         Optional[int],
-        Field(description="Maximum endpoint entries; defaults to 50 and is capped at 200."),
+        Field(description="Maximum endpoint entries; defaults to 20 and is capped at 200."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """List the immediate downstream endpoints that consume a term or net
     across hierarchy. Use this for direct readers; use get_drivers for upstream
     sources or trace_cone for the transitive combinational fanout. Returns leaf
     readers
     (instances with pin, model, source ref) and top-level ports. Lowered assign
     glue is traversed rather than reported as an endpoint.
-    Capped at limit (default 50, max 200) with a `truncated` flag; no cursor —
+    Capped at limit (default 20, max 200) with a `truncated` flag; no cursor —
     raise limit to see more."""
     return api.get_loads(path, limit)
 
@@ -465,7 +484,7 @@ def trace_cone(
         int,
         Field(description="Maximum listed endpoints per frontier kind; clamped to 1..200."),
     ] = 50,
-) -> dict:
+) -> Dict[str, Any]:
     """Trace the combinational fanin/fanout cone of a term/net via naja's
     LogicCone. Use this for transitive logic reachability; use get_drivers or
     get_loads for only immediate endpoints. direction: fanin|fanout. The cone
@@ -496,7 +515,7 @@ def get_source(
                           "upstream source (e.g. the RTL behind a Yosys "
                           "netlist cell) instead of its declaration."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Read the bounded source excerpt that produced an object (for example,
     an SV FF instance maps to its `always_ff` block; a netlist cell maps to its
     instantiation line). Use when exact source text is needed; use get_intent
@@ -513,7 +532,7 @@ def get_module_card(
         str,
         Field(description="Elaborated module/model name, not an instance path."),
     ],
-) -> dict:
+) -> Dict[str, Any]:
     """Deterministic module summary: ports, instance counts by model,
     sequential cell and register-bit counts, bounded RAM/ROM details (width,
     depth, ports, initialization preview), and source ref. Clock/reset candidates
@@ -528,7 +547,7 @@ def get_content_hash(
         Optional[str],
         Field(description="Elaborated module/model name; omit for the top design."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Versioned SHA-256 of a model and its descendants, computed on demand.
     Compare elaborated content across snapshots using the same format_version.
     Names and IDs participate; source metadata and primitive definitions are
@@ -545,20 +564,21 @@ def get_stats(
     ] = None,
     limit: Annotated[
         Optional[int],
-        Field(description="Models per page; defaults to 25 and is capped at 200."),
+        Field(description="Opt into model details with this page size (maximum 200). Omit limit and cursor for summary only; cursor-only pages default to 25."),
     ] = None,
     cursor: Annotated[
         Optional[str],
         Field(description="Opaque next_cursor from the previous response; "
                           "omit for the first page."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Summarize instance population by model below `path` or the top design.
     Use this for aggregate leaf/sequential/model counts, register bits, and
     RAM/ROM counts and capacity; use get_hierarchy for actual child instances
     or get_module_card for one model's ports. This
     read-only query requires a loaded design. Returns `root_model`, flat totals,
-    a paginated `models` list, `total_models`, `has_more`, and `next_cursor`.
+    `total_models`, and an empty `models` list by default. Pass limit or the
+    returned next_cursor to retrieve model details with pagination.
     Register bits count modeled flip-flop/latch states, excluding memories;
     unknown sequential bit counts are reported separately."""
     return api.get_stats(path, limit, cursor)
@@ -575,7 +595,7 @@ def get_intent(
         Literal["auto", "type", "fsm_states", "parameters"],
         Field(description="Intent fact to retrieve; auto selects from the reference."),
     ] = "auto",
-) -> dict:
+) -> Dict[str, Any]:
     """Retrieve source-level intent that netlist lowering erases (warm-only).
     Use when the answer is in the SystemVerilog or VHDL *type/declaration*, not
     the flattened gates: enum/typedef state names + encodings (incl. PACKAGE
@@ -602,7 +622,7 @@ def load_intent(
         Optional[str],
         Field(description="Top module/entity name; omit to reuse the captured or inferred top."),
     ] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Make the warm source-intent layer available for get_intent. Use after a
     SystemVerilog or VHDL load that did not retain intent; do not call for
     gate-level Verilog, and prefer `intent=True` on the initial load.
@@ -623,7 +643,7 @@ if api.python_enabled():
             Field(description="Python expression or statements to execute "
                               "in the live server process."),
         ],
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Escape hatch: run Python against the live design ('naja' raw bindings,
         'snl' raw helpers, 'session', 'top' in scope). Prefer the typed tools
         above; use this only for queries they cannot express. Unsandboxed

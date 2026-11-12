@@ -166,6 +166,7 @@ def test_server_tools_registered():
     # whether it only reads or mutates the current session/filesystem.
     for tool in tools:
         assert tool.annotations is not None, tool.name
+        assert tool.outputSchema is not None, tool.name
         for parameter, schema in tool.inputSchema["properties"].items():
             assert schema.get("description"), f"{tool.name}.{parameter}"
 

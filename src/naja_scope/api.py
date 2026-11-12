@@ -266,7 +266,8 @@ def find(pattern: str, kind: str = "any", limit: Optional[int] = None,
                     children.append(child)
             stack.extend(reversed(children))
 
-    page, envelope = paginate(walk(), limit=limit, cursor=cursor)
+    page, envelope = paginate(walk(), limit=clamp_limit(limit, default=20),
+                               cursor=cursor)
     return {"pattern": pattern, "kind": kind, "matches": page, **envelope}
 
 
@@ -336,14 +337,14 @@ def _resolve_single(path: str, kinds=("term", "net")) -> Resolved:
 def get_drivers(path: str, limit: Optional[int] = None) -> dict:
     resolved = _resolve_single(path)
     return connectivity.endpoints(resolved, SESSION, "drivers",
-                                  clamp_limit(limit))
+                                  clamp_limit(limit, default=20))
 
 
 @serialized
 def get_loads(path: str, limit: Optional[int] = None) -> dict:
     resolved = _resolve_single(path)
     return connectivity.endpoints(resolved, SESSION, "loads",
-                                  clamp_limit(limit))
+                                  clamp_limit(limit, default=20))
 
 
 @serialized
@@ -511,7 +512,8 @@ def _collect_model_stats(design, memo: dict, sequential_models: dict) -> dict:
 @serialized
 def get_stats(path: Optional[str] = None, limit: Optional[int] = None,
               cursor: Optional[str] = None) -> dict:
-    limit = clamp_limit(limit, default=25)
+    """Summary totals; pass limit or cursor to include per-model details."""
+    summary_only = limit is None and cursor is None
     if path:
         matches = resolve_path(SESSION, path, kind="instance")
         design = matches[0].obj.design
@@ -523,7 +525,13 @@ def get_stats(path: Optional[str] = None, limit: Optional[int] = None,
     for m in models:
         m["leaf_by_model"] = dict(sorted(
             m["leaf_by_model"].items(), key=lambda kv: -kv[1])[:12])
-    page, envelope = paginate(models, limit=limit, cursor=cursor)
+    if summary_only:
+        page = []
+        envelope = {"count": 0, "has_more": bool(models),
+                    "next_cursor": "0" if models else None}
+    else:
+        page, envelope = paginate(models, limit=clamp_limit(limit, default=25),
+                                   cursor=cursor)
     return {
         "root_model": root["model"],
         "flat_leaves": root["flat_leaves"],

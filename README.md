@@ -210,6 +210,22 @@ counts remain explicit lower bounds when that count is nonzero. Memories
 are recognized from native naja primitives; opaque memory macros are not
 assigned an inferred capacity.
 
+## Bounded tool output
+
+MCP tools send compact JSON text alongside the same structured result.
+`get_stats()` returns aggregate counts and `total_models` with an empty
+`models` list. Request details with `get_stats(limit=5)`, or pass the
+summary's `next_cursor` to start paging models (25 per page when only a cursor
+is supplied; maximum 200). Totals stay the same on every page.
+
+`find`, `get_drivers`, and `get_loads` default to 20 entries (maximum 200).
+Use `find`'s `next_cursor` to continue; for endpoints, check `truncated` and
+raise `limit` or query an individual bus bit. Explicit large limits or deep
+hierarchy queries can still exceed a client's inline output cap.
+
+These defaults change benchmark token counts; record the naja-scope version
+when comparing runs across this change.
+
 ## Content comparison
 
 `get_content_hash()` returns a versioned SHA-256 of the top model and its

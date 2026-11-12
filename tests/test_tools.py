@@ -87,7 +87,10 @@ def test_stats(uart_session):
     assert out["total_models"] >= 3  # uart_top, uart_tx, counter
     assert out["flat_leaves"] > 0
     assert out["flat_sequential"] > 0
-    assert out["models"]
+    assert out["models"] == []
+    assert out["count"] == 0
+    assert out["has_more"] is True
+    assert out["next_cursor"] == "0"
 
 
 def test_status(uart_session):

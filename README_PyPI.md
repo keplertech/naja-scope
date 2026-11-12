@@ -87,8 +87,16 @@ primitive semantics matter. Names and IDs participate; source metadata and
 primitive definitions are excluded. This is not functional equivalence.
 Hashing is explicit because large hierarchies can take time.
 
-All responses are token-bounded: lists paginate, large results truncate with
-clear markers. Your context stays small; your answers stay accurate.
+Tools send compact JSON text alongside the same structured result.
+`get_stats()` returns summary counts with an empty `models` list; pass
+`limit=5` for model details, or use its `next_cursor` to start paging
+(cursor-only pages default to 25 models; maximum 200).
+`find`, `get_drivers`, and `get_loads` default to 20 entries, with explicit
+limits up to 200. Continue `find` with `next_cursor`; for endpoints, check
+`truncated` and increase `limit` or query an individual bus bit.
+Explicit large limits and deep hierarchy queries can still exceed client
+output caps. Record the naja-scope version when comparing benchmark token
+counts across these changes.
 
 ---
 
