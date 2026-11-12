@@ -102,7 +102,9 @@ endpackage
     source = tmp_path / 'top.sv'
     source.write_text('`include "pkg.svh"\nmodule nav_top(output logic [nav_pkg::B-1:0] q); assign q = 0; endmodule\n')
     flist = tmp_path / 'rtl.f'
-    flist.write_text(f'+incdir+{tmp_path}\n{source}\n')
+    # File lists use shell-style escaping, including on Windows. Forward
+    # slashes preserve drive paths; quotes also support directories with spaces.
+    flist.write_text(f'+incdir+"{tmp_path.as_posix()}"\n"{source.as_posix()}"\n')
     api.SESSION.reset()
     try:
         api.SESSION.load_systemverilog([], flist=str(flist), keep_ast_link=True)
