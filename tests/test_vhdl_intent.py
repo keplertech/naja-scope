@@ -157,6 +157,13 @@ def test_package_members_any_case(loaded):
     assert "error" in api.get_intent("fsm_pkg::missing")
 
 
+def test_parameter_navigation(loaded):
+    for want in ("auto", "parameters"):
+        assert api.get_intent("fsm_top.u0.n", want=want)["value"] == "4"
+        assert api.get_intent("FSM_PKG", want=want)["parameters"][0]["value"] == "4"
+        assert api.get_intent("fsm_pkg::width", want=want)["value"] == "4"
+
+
 def test_inferred_flop_answers_with_a_note(loaded):
     top = SESSION.require_top()
     ff = next(i for i in top.design.getInstances()

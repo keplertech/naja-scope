@@ -391,7 +391,9 @@ def find(
     """Search case-sensitive object names across the loaded design with a glob.
     Use this when an exact path is unknown; use resolve once a path is known or
     get_hierarchy to browse structure. A dot in `pattern` switches matching to
-    full hierarchical paths. Returns typed descriptors in `matches` plus
+    full hierarchical paths. Use '*state*', not the regex '.*state.*'.
+    Parameters and package members are source intent: use get_intent.
+    Returns typed descriptors in `matches` plus
     `count`, `has_more`, and an opaque `next_cursor` for pagination."""
     return api.find(pattern, kind, limit, cursor)
 
@@ -589,6 +591,7 @@ def get_intent(
     ref: Annotated[
         str,
         Field(description="Hierarchical object/instance path or package "
+                          "parameter path (top.inst.PARAM), package name, or "
                           "member such as pkg::NAME."),
     ],
     want: Annotated[
@@ -602,7 +605,8 @@ def get_intent(
     typedefs whose members live in another file), and symbolic PARAMETER or
     generic expressions (the formula behind a baked-in width).
     ref: a hierarchical path ('cva6.csr_regfile_i.priv_lvl_q'), a package member
-    ('riscv::PLEN'), or an instance path for its parameters.
+    ('riscv::PLEN'), a parameter path ('top.inst.PARAM'), an instance path
+    for its parameters, or a bare package name to list its parameters.
     want: auto | type | fsm_states | parameters. If the intent layer is not
     loaded, returns a note and you should fall back to get_source."""
     return api.get_intent(ref, want)
