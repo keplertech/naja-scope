@@ -53,7 +53,7 @@ turns your design into something an agent can *navigate*:
   parameter formulas that normally vanish when a design is elaborated.
 
 Requires **najaeda 0.7.35 or newer**. See the
-[0.1.24 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.24.md)
+[0.1.25 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.25.md)
 for test results and snapshot migration requirements.
 
 Works on **RTL and gate-level netlists** alike — load elaborated SystemVerilog
