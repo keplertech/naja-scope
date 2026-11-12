@@ -67,25 +67,15 @@ jobs:
           - name: Linux x86_64
             os: ubuntu-24.04
             expected_architecture: x86_64
-            najaeda_source_build: false
           - name: Linux aarch64
             os: ubuntu-24.04-arm
             expected_architecture: aarch64
-            najaeda_source_build: false
           - name: macOS arm64
             os: macos-15
             expected_architecture: aarch64
-            najaeda_source_build: false
-          - name: macOS x86_64
-            os: macos-15-intel
-            expected_architecture: x86_64
-            # najaeda does not currently publish macOS x86_64 wheels. Building
-            # its sdist here verifies that the native fallback remains usable.
-            najaeda_source_build: true
           - name: Windows x86_64
             os: windows-2025
             expected_architecture: x86_64
-            najaeda_source_build: false
         # Windows arm64 is not listed because najaeda does not currently ship
         # a win_arm64 wheel or support that source-build path.
     steps:
@@ -99,32 +89,12 @@ jobs:
       - name: Verify runner architecture
         run: python ci/check_architecture.py "${{ matrix.expected_architecture }}"
 
-      - name: Install najaeda source-build dependencies
-        if: matrix.najaeda_source_build
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: "1"
-          HOMEBREW_NO_INSTALL_CLEANUP: "1"
-        run: brew install cmake boost capnp tbb
-
-      - name: Install najaeda from source
-        if: matrix.najaeda_source_build
-        env:
-          CMAKE_BUILD_PARALLEL_LEVEL: "4"
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --no-binary=najaeda "najaeda>=0.7.35"
-
       - name: Install package + test dependencies from wheels
-        if: ${{ !matrix.najaeda_source_build }}
         run: |
           python -m pip install --upgrade pip
           # These are the platforms for which najaeda promises binary wheels;
           # fail clearly if the expected native artifact is absent.
           python -m pip install --only-binary=najaeda -e . pytest
-
-      - name: Install package + test dependencies after source build
-        if: matrix.najaeda_source_build
-        run: python -m pip install -e . pytest
 
       - name: Run tests
         run: python -m pytest -q

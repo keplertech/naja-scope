@@ -31,6 +31,8 @@ the signal, not its flop.
 from __future__ import annotations
 
 import re
+import shlex
+from pathlib import Path
 
 from najaeda import naja
 
@@ -135,13 +137,16 @@ class IntentProvider:
     """Query client over naja's curated intent API, bound to a Session for
     structural ref→object resolution.
 
-    Stateless beyond the session handle: the live AST is owned by naja (kept
-    alive by `keep_ast_link`), so "loaded" is simply `naja.intentAvailable()`.
+    The live AST is owned by naja (kept alive by `keep_ast_link`), so "loaded"
+    is simply `naja.intentAvailable()`. Package discovery is lazy and cached
+    for this session's source inputs.
     Plugs into Session as the IntentProvider seam.
     """
 
     def __init__(self, session):
         self.session = session
+        self._packages = None
+        self._package_sources = None
 
     @property
     def _vhdl(self) -> bool:
@@ -182,7 +187,20 @@ class IntentProvider:
     def get_parameters(self, ref: str, symbolic: bool = True) -> dict:
         """Parameters + localparams of an instance/module, with their SYMBOLIC
         initializer text (lost in lowering) alongside the elaborated value."""
-        rec = naja.intentParametersOf(self._resolve_instance_obj(ref))
+        if "::" in ref:
+            return self._package_record(ref)
+        try:
+            obj = self._resolve_instance_obj(ref)
+        except ScopeError:
+            parameter = self.parameter_path(ref)
+            if parameter is not None:
+                return parameter
+            package = self.packages().get(self._key(ref))
+            if package is not None:
+                return {"ref": ref, "package": ref, "parameters": package,
+                        "count": len(package)}
+            raise
+        rec = naja.intentParametersOf(obj)
         if rec is None or rec.get("status") == "unavailable":
             raise ScopeError(
                 f"{ref!r}: no parameters recovered (not an instance/module with "
@@ -205,10 +223,136 @@ class IntentProvider:
             rec = self._package_record(ref)
             return {"intent": "type" if "canonical_kind" in rec else "parameter",
                     **rec}
-        resolved = resolve_path(self.session, ref)[0]
+        try:
+            resolved = resolve_path(self.session, ref)[0]
+        except ScopeError:
+            parameter = self.parameter_path(ref)
+            if parameter is not None:
+                return {"intent": "parameter", **parameter}
+            return {"intent": "parameters", **self.get_parameters(ref)}
         if resolved.kind == "instance":
             return {"intent": "parameters", **self.get_parameters(ref)}
         return {"intent": "type", **self.get_type(ref)}
+
+    def _key(self, name: str) -> str:
+        return name.lower() if self._vhdl else name
+
+    def parameter_path(self, ref: str) -> dict | None:
+        """Only reinterpret the final segment after structural resolution fails."""
+        parent, dot, name = ref.rpartition(".")
+        if not dot:
+            return None
+        try:
+            obj = self._resolve_instance_obj(parent)
+        except ScopeError:
+            return None
+        rec = naja.intentParametersOf(obj) or {}
+        params = ([_vhdl_parameter(p) for p in rec.get("params", [])
+                   if p.get("owner_kind") != "package"] if self._vhdl
+                  else rec.get("parameters", []))
+        for p in params:
+            if self._key(p["name"]) == self._key(name):
+                return {**p, "value": _decimal_value(p.get("value")), "ref": ref}
+        return None
+
+    def _source_texts(self):
+        """Discover source candidates, including file lists and local includes.
+
+        This only supplies names: the live raw intent API validates every
+        candidate and supplies all values, expressions and source locations.
+        """
+        from . import snl
+        pending = list(self.session.loaded_files)
+        for design in snl.iter_designs():
+            loc = snl.source_loc(design)
+            if loc:
+                pending.append(loc[0])
+        seen = set()
+        while pending:
+            filename = self.session.find_source_file(str(pending.pop()))
+            if not filename:
+                continue
+            path = Path(filename).resolve()
+            if path in seen:
+                continue
+            seen.add(path)
+            try:
+                text = path.read_text()
+            except (OSError, UnicodeError):
+                continue
+            if (path.suffix in (".f", ".flist", ".lst")
+                    or str(path) == str(Path(self.session.load_spec.get("flist") or "").resolve())):
+                for line in text.splitlines():
+                    try:
+                        tokens = shlex.split(line, comments=True)
+                    except ValueError:
+                        continue
+                    for token in tokens:
+                        if not token.startswith(("-", "+")):
+                            candidate = path.parent / token
+                            pending.append(str(candidate) if candidate.is_file() else token)
+                continue
+            for include in re.findall(r'`include\s+"([^"]+)"', text):
+                candidate = path.parent / include
+                pending.append(str(candidate) if candidate.is_file() else include)
+            yield text
+
+    def packages(self) -> dict:
+        """Lazy package parameter catalogue; never infer values from RTL text.
+
+        SV currently has only a name-keyed raw package API. Source tokens are
+        candidates, including comma-separated declarations and macro bodies;
+        inactive declarations are discarded by the live engine lookup.
+        """
+        sources = tuple(self.session.loaded_files)
+        if self._packages is not None and self._package_sources == sources and not self._vhdl:
+            return self._packages
+        from . import snl
+        packages = {}
+        if self._vhdl:
+            for design in snl.iter_designs():
+                for decl in naja.intentDescribe(design).get("declarations", []):
+                    if decl.get("owner_kind") == "package":
+                        params = packages.setdefault(self._key(decl["owner"]), {})
+                        if decl.get("kind") == "constant":
+                            ref = f"{decl['owner']}::{decl['name']}"
+                            params[self._key(decl["name"])] = {
+                                **_vhdl_parameter(decl), "ref": ref}
+        else:
+            for text in self._source_texts():
+                text = re.sub(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"',
+                              " ", text, flags=re.S)
+                for match in re.finditer(
+                        r'\bpackage\s+(?:(?:automatic|static)\s+)?(\w+)\s*;(.*?)\bendpackage\b',
+                        text, re.S):
+                    pkg, body = match.groups()
+                    for name in dict.fromkeys(re.findall(r'\b[A-Za-z_]\w*\b', body)):
+                        rec = naja.intentPackageMember(pkg, name)
+                        if rec is not None and "value" in rec:
+                            packages.setdefault(pkg, {})[name] = {
+                                **rec, "value": _decimal_value(rec["value"]),
+                                "ref": f"{pkg}::{name}"}
+        self._packages = {pkg: list(params.values()) for pkg, params in packages.items()}
+        self._package_sources = sources
+        return self._packages
+
+    def search_hint(self, pattern: str) -> str | None:
+        """Bounded hint over unique models/packages, never flattened instances."""
+        import fnmatch
+        from . import snl
+        for design in snl.iter_designs():
+            rec = naja.intentParametersOf(design) or {}
+            params = rec.get("params", []) if self._vhdl else rec.get("parameters", [])
+            for p in params:
+                if p.get("owner_kind") != "package" and fnmatch.fnmatchcase(p["name"], pattern):
+                    return (f"{p['name']} is a parameter of module {design.getName()}; "
+                            f"use get_intent({design.getName()!r}, want='parameters').")
+        for params in self.packages().values():
+            for p in params:
+                if fnmatch.fnmatchcase(p["name"], pattern) or fnmatch.fnmatchcase(p["ref"], pattern):
+                    return (f"{p['ref']} is a package parameter; "
+                            f"use get_intent({p['ref']!r}).")
+        return None
 
     # -- VHDL records ---------------------------------------------------------
 

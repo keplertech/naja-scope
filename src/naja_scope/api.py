@@ -8,6 +8,7 @@ import contextlib
 import fnmatch
 import io
 import os
+import re
 from typing import List, Optional, Union
 
 from najaeda import naja
@@ -221,6 +222,17 @@ def find(pattern: str, kind: str = "any", limit: Optional[int] = None,
     if kind not in ("instance", "net", "port", "module", "any"):
         raise ScopeError("kind must be instance|net|port|module|any.")
     top = SESSION.require_top()
+    # Diagnose common regex syntax before an expensive hierarchy walk. Leave
+    # glob character classes alone (e.g. [^a] is a valid glob class).
+    outside_classes = re.sub(r"\[[^\]]*\]", "", pattern)
+    if any(token in outside_classes for token in (".*", ".+", "^", "$", "\\")):
+        suggestion = pattern.removeprefix("^").removesuffix("$")
+        suggestion = suggestion.replace(".*", "*").replace(".+", "?*")
+        suggestion = suggestion.replace(r"\.", ".")
+        page, envelope = paginate([], limit=clamp_limit(limit, default=20), cursor=cursor)
+        return {"pattern": pattern, "kind": kind, "matches": page, **envelope,
+                "hint": ("Pattern looks like a regex; find uses case-sensitive globs "
+                         f"(*, ?, [abc]). Try {suggestion!r}; no hierarchy scan was run.")}
     top_name = top.name
     is_path_pattern = "." in pattern
 
@@ -268,7 +280,12 @@ def find(pattern: str, kind: str = "any", limit: Optional[int] = None,
 
     page, envelope = paginate(walk(), limit=clamp_limit(limit, default=20),
                                cursor=cursor)
-    return {"pattern": pattern, "kind": kind, "matches": page, **envelope}
+    out = {"pattern": pattern, "kind": kind, "matches": page, **envelope}
+    if not page and cursor is None and SESSION.intent_available:
+        hint = SESSION.intent.search_hint(pattern)
+        if hint:
+            out["hint"] = hint
+    return out
 
 
 @serialized
@@ -568,7 +585,8 @@ def get_intent(ref: str, want: str = "auto") -> dict:
         if want in ("fsm_states", "enum"):
             return {"intent": "fsm_states", **ip.get_fsm_states(ref)}
         if want == "parameters":
-            return {"intent": "parameters", **ip.get_parameters(ref)}
+            rec = ip.get_parameters(ref)
+            return {"intent": "parameter" if "name" in rec else "parameters", **rec}
         raise ScopeError(
             f"unknown want={want!r}; use auto|type|fsm_states|parameters")
     except ScopeError as e:

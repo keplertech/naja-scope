@@ -269,6 +269,15 @@ that record fields report widths, not bit positions. Validated on the
 
 ## What you can ask
 
+`find` uses case-sensitive globs: use `*state*`. Regex-style patterns such as
+`.*state.*` return a corrective hint without scanning the hierarchy. When a
+search misses a known parameter, a warm intent session points to `get_intent`.
+Use `get_intent("top.inst.PARAM")` for one parameter, `get_intent("pkg::NAME")`
+for a package member, or `get_intent("pkg", want="parameters")` to list package
+parameters. SystemVerilog package listing discovers names from available
+source files and validates them through the live engine; macro-generated
+names may require an explicit `pkg::NAME` query.
+
 Once a design is loaded, your assistant can:
 
 - **Resolve** any signal or instance by hierarchical path (with glob and
