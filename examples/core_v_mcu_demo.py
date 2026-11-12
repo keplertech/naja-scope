@@ -81,17 +81,16 @@ def main():
 
     banner('Q: "How big is this design once elaborated?" (get_stats)')
     stats = api.get_stats()
-    root = stats["models"][0]
-    print(f"  flattened leaf gates    : {root['flat_leaves']:,}")
-    print(f"  sequential instances    : {root['flat_sequential']:,}")
+    print(f"  flattened leaf gates    : {stats['flat_leaves']:,}")
+    print(f"  sequential instances    : {stats['flat_sequential']:,}")
     print(f"  distinct model variants : {stats['total_models']}")
     # Revalidated with published najaeda 0.7.34: 303,257 leaves
     # (285,546 with 0.7.33). Same-source raw enumeration confirms changed
     # OR/mux lowering, with all module names, hierarchical multiplicities,
     # per-module sequential counts, blackboxes and CDC endpoints preserved.
     # Word-wide native cells count as one instance, not as individual RTL bits.
-    assert root["flat_leaves"] == 303_257, "elaborated leaf count drifted"
-    assert root["flat_sequential"] == 6_501, "sequential instance count drifted"
+    assert stats["flat_leaves"] == 303_257, "elaborated leaf count drifted"
+    assert stats["flat_sequential"] == 6_501, "sequential instance count drifted"
     assert stats["total_models"] == 320, "elaborated model count drifted"
 
     banner('Q: "Which modules resolve as blackboxes (undelivered hard '
