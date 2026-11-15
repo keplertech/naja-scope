@@ -644,9 +644,24 @@ def _cap(text: str) -> str:
 
 # Imported lazily so a normal installation needs no viewer dependencies.
 @serialized
-def open_schematic(path: Optional[str] = None) -> dict:
+def open_schematic(path: Optional[str] = None, view_options: Optional[dict] = None) -> dict:
     from .schematic import open_schematic as open_view
-    return open_view(path)
+    return open_view(path, view_options)
+
+
+@serialized
+def show_schematic_net(path: str, trace: bool = False, add: bool = True,
+                       color: Optional[str] = None) -> dict:
+    from .schematic import show_schematic_net as show_net
+    return show_net(path, trace, add, color)
+
+
+@serialized
+def export_schematic(file: str, instances: Optional[List[str]] = None,
+                     nets: Optional[List[str]] = None, traces: Optional[List[str]] = None,
+                     view_options: Optional[dict] = None, scale: float = 1.0) -> dict:
+    from .schematic import export_schematic as export
+    return export(file, instances, nets, traces, view_options, scale)
 
 
 @serialized

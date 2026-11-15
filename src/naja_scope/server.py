@@ -106,11 +106,39 @@ def _tool(*, annotations: ToolAnnotations) -> Callable:
 @_tool(annotations=SESSION_MUTATION)
 def open_schematic(
     path: Annotated[Optional[str], Field(description="Instance path to focus; omit for the top.")] = None,
+    view_options: Annotated[Optional[dict], Field(description="Drawing options: instance_label (name/model/both), sink_rows, max_sinks (0 = all), group_by (model/hierarchy/role/pin), convergence_outline.")] = None,
 ) -> Dict[str, Any]:
     """Serve an interactive browser schematic of the current design. Returns a
     local URL to open on the MCP server's machine; requires the schematic extra.
     Uses the loaded design and supports anonymous #id instances."""
-    return api.open_schematic(path)
+    return api.open_schematic(path, view_options)
+
+
+@_tool(annotations=SESSION_MUTATION)
+def show_schematic_net(
+    path: Annotated[str, Field(description="Scope pin/port path, e.g. top.u_cpu.D[3]. Select one bit of a bus.")],
+    trace: Annotated[bool, Field(description="Draw the combinational fan-in cone back to flops, ports and blackboxes.")] = False,
+    add: Annotated[bool, Field(description="Add to existing traces; false clears the drawing first.")] = True,
+    color: Annotated[Optional[str], Field(description="Optional trace color, #rrggbb.")] = None,
+) -> Dict[str, Any]:
+    """Draw a pin's net or fan-in cone in the browser schematic. Returns a
+    local viewer URL. Uses the current design; supports anonymous #id paths."""
+    return api.show_schematic_net(path, trace, add, color)
+
+
+@_tool(annotations=FILESYSTEM_WRITE)
+def export_schematic(
+    file: Annotated[str, Field(description="Local destination .svg or .png file; existing file may be overwritten.")],
+    instances: Annotated[Optional[List[str]], Field(description="Scope instance paths to draw as boxes; excludes the top.")] = None,
+    nets: Annotated[Optional[List[str]], Field(description="Scope pin/port paths for one-net traces; select bus bits.")] = None,
+    traces: Annotated[Optional[List[str]], Field(description="Scope pin/port paths for combinational fan-in cones; select bus bits.")] = None,
+    view_options: Annotated[Optional[dict], Field(description="Drawing options as open_schematic; also title, caption, legend, hide_ui_glyphs for exports.")] = None,
+    scale: Annotated[float, Field(description="PNG pixels per SVG pixel (0 < scale <= 64); ignored for SVG.")] = 1.0,
+) -> Dict[str, Any]:
+    """Export a fresh schematic from the loaded design without a browser.
+    Supply 1–200 total targets. Returns file, format and byte size, without
+    embedding image data. Browser annotations and traces are independent."""
+    return api.export_schematic(file, instances, nets, traces, view_options, scale)
 
 
 @_tool(annotations=SESSION_MUTATION)
