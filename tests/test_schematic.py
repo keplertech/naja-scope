@@ -22,11 +22,19 @@ def design():
         db = naja.NLDB.create(u)
         lib = naja.NLLibrary.create(db, "work")
         top = naja.SNLDesign.create(lib, "top")
-        leaf = naja.SNLDesign.create(lib, "leaf")
+        port = naja.SNLBusTerm.create(top, naja.SNLTerm.Direction.Input, 3, 0, "data")
+        single = naja.SNLBusTerm.create(top, naja.SNLTerm.Direction.Input, 7, 7, "single")
+        prims = naja.NLLibrary.createPrimitives(db, "primitives")
+        leaf = naja.SNLDesign.createPrimitive(prims, "leaf")
         naja.SNLScalarTerm.create(leaf, naja.SNLTerm.Direction.Input, "A")
         named = naja.SNLInstance.create(top, leaf, "named")
         anonymous = naja.SNLInstance.create(top, leaf)
         another = naja.SNLInstance.create(top, leaf)
+        for term in (port.getBusTermBit(2), single.getBusTermBit(7)):
+            net = naja.SNLScalarNet.create(top)
+            term.setNet(net)
+            if term == port.getBusTermBit(2):
+                anonymous.getInstTerm(leaf.getTerm("A")).setNet(net)
         u.setTopDB(db)
         u.setTopDesign(top)
         ids = named.getID(), anonymous.getID(), another.getID()
@@ -38,8 +46,8 @@ def design():
 @pytest.fixture
 def viewer(design):
     package = pytest.importorskip("naja_schematic")
-    if not hasattr(package, "ViewerServer"):
-        pytest.skip("requires naja-schematic>=0.2.0")
+    if not hasattr(package, "export_png"):
+        pytest.skip("requires naja-schematic>=0.3.0")
     pytest.importorskip("websockets")
     return design
 
@@ -134,8 +142,11 @@ def test_mcp_tools_registered():
     import asyncio
     from naja_scope import server
     tools = {t.name: t for t in asyncio.run(server.mcp.list_tools())}
-    assert {"open_schematic", "annotate_schematic", "get_schematic_selection"} <= tools.keys()
+    assert {"open_schematic", "annotate_schematic", "get_schematic_selection",
+            "show_schematic_net", "export_schematic"} <= tools.keys()
     assert tools["get_schematic_selection"].annotations.readOnlyHint
+    assert not tools["export_schematic"].annotations.readOnlyHint
+    assert tools["export_schematic"].annotations.destructiveHint
 
 
 def test_viewer_waits_for_design_lock(viewer):
@@ -184,3 +195,95 @@ def test_old_generation_cannot_restore_selection_after_reload(viewer, tmp_path):
         ws.send(json.dumps({"request": "load_root", "generation": generation}))
         receive(ws, "root_response")
         assert api.get_schematic_selection()["selection"]["path"] == "top.named"
+
+
+def test_net_trace_and_view_options_protocol(viewer):
+    options = {"instance_label": "both", "max_sinks": 16, "group_by": "role"}
+    opened = api.open_schematic(view_options=options)
+    with connect(opened["url"]) as ws:
+        ws.send(json.dumps({"request": "load_root"}))
+        receive(ws, "root_response")
+        assert receive(ws, "view_options").items() >= options.items()
+        path = f"top.#{viewer[1]}.A"
+        result = api.show_schematic_net(path, color="#ff8800", add=False)
+        assert result["url"] == opened["url"]
+        message = receive(ws, "show_net")
+        assert message["id_path"] == [viewer[1]]
+        assert message["color"] == "#ff8800"
+        assert message["add"] is False
+        api.show_schematic_net("top.data[2]", trace=True)
+        message = receive(ws, "show_net")
+        assert message["id_path"] == []
+        assert message["bit"] == 2
+        assert message["trace"] is True
+        api.show_schematic_net("top.single")
+        assert receive(ws, "show_net")["bit"] == 7
+    # Traces and drawing options are replayed to a newly connected viewer.
+    with connect(opened["url"]) as ws:
+        ws.send(json.dumps({"request": "load_root"}))
+        receive(ws, "root_response")
+        assert receive(ws, "view_options")["group_by"] == "role"
+        assert receive(ws, "show_net")["id_path"] == [viewer[1]]
+        assert receive(ws, "show_net")["trace"] is True
+        api.reset_universe()
+        receive(ws, "design_changed")
+
+
+def test_headless_exports(viewer, tmp_path):
+    import struct
+    import xml.etree.ElementTree as ET
+
+    svg = tmp_path / "cone.svg"
+    result = api.export_schematic(str(svg), instances=[f"top.#{viewer[1]}"],
+                                  nets=["top.data[2]"], traces=[f"top.#{viewer[1]}.A"],
+                                  view_options={"title": "Input cone", "legend": True,
+                                                "instance_label": "both", "hide_ui_glyphs": True})
+    assert result == {"file": str(svg), "format": "svg", "bytes": svg.stat().st_size}
+    root = ET.parse(svg).getroot()
+    assert root.tag.endswith("svg")
+    assert "Input cone" in "".join(root.itertext())
+    assert any(e.get("data-id-path") == str(viewer[1]) for e in root.iter())
+    assert any(e.get("class") == "net" for e in root.iter())
+    png = tmp_path / "cone.png"
+    api.export_schematic(str(png), nets=["top.data[2]"], scale=2)
+    data = png.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert all(n > 0 for n in struct.unpack(">II", data[16:24]))
+    assert schematic._viewer is None  # no browser or socket needed
+
+
+def test_new_tool_validation(viewer, tmp_path):
+    for kwargs in ({"path": "top.data"}, {"path": "top.data[2]", "color": "bad"},
+                   {"path": "top.data[2]", "trace": "yes"}):
+        with pytest.raises(ScopeError):
+            api.show_schematic_net(**kwargs)
+    for options in ({"max_sinks": -1}, {"unknown": True}, []):
+        with pytest.raises(ScopeError):
+            api.open_schematic(view_options=options)
+    svg = tmp_path / "bad.svg"
+    for kwargs in ({}, {"instances": ["top"]}, {"nets": ["top.data"]},
+                   {"instances": ["top.named"] * 201}, {"instances": "top.named"},
+                   {"nets": ["top.data[2]"], "view_options": {"group_by": "invalid"}}):
+        with pytest.raises(ScopeError):
+            api.export_schematic(str(svg), **kwargs)
+    with pytest.raises(ScopeError, match="scale"):
+        api.export_schematic(str(tmp_path / "bad.png"), nets=["top.data[2]"], scale=0)
+    with pytest.raises(ScopeError, match="Cannot export"):
+        api.export_schematic(str(tmp_path / "missing" / "bad.svg"), nets=["top.data[2]"])
+    assert not svg.exists()
+    assert schematic._viewer is None
+
+
+def test_export_elaborated_hierarchical_cone(uart_session, tmp_path):
+    import xml.etree.ElementTree as ET
+    package = pytest.importorskip("naja_schematic")
+    if not hasattr(package, "export_png"):
+        pytest.skip("requires naja-schematic>=0.3.0")
+    file = tmp_path / "busy.svg"
+    api.export_schematic(str(file), traces=["uart_top.u_tx.tx_busy"],
+                         view_options={"instance_label": "both"})
+    root = ET.parse(file).getroot()
+    boxes = [e for e in root.iter() if e.get("class") == "instance"]
+    assert len(boxes) > 1  # cone expands logic and reaches its state registers
+    assert all(e.get("data-path").startswith("u_tx/") for e in boxes)
+    assert any("DFF" in e.get("data-model", "").upper() for e in boxes)

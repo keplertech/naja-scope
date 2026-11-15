@@ -55,7 +55,7 @@ turns your design into something an agent can *navigate*:
   parameter formulas that normally vanish when a design is elaborated.
 
 Requires **najaeda 0.7.35 or newer**. See the
-[0.1.25 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.25.md)
+[0.1.26 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.26.md)
 for test results and snapshot migration requirements.
 
 Works on **RTL and gate-level netlists** alike: load elaborated SystemVerilog
@@ -363,8 +363,7 @@ Apache-2.0. See [LICENSE](LICENSE).
 
 ## Optional browser schematic
 
-Requires **naja-schematic 0.2.0 or later** (the release containing the
-embeddable viewer API):
+Requires **naja-schematic 0.3.x**:
 
 ```bash
 pip install "naja-scope[schematic]"
@@ -381,6 +380,26 @@ Restart the MCP server after installation. Load a design as usual, then use:
   each with at most 2000 message characters.
 - `get_schematic_selection()`: returns the last clicked instance as a regular
   naja-scope path, usable with source, hierarchy and module-card queries.
+- `show_schematic_net(path="top.u_cpu.D[3]", trace=True)`: draws the pin's
+  combinational fan-in cone back to flops, ports and blackboxes. With
+  `trace=False` (the default), draws just its net. Use `add=False` to clear the
+  drawing first, and `color="#ff8800"` to choose a trace color. Targets are
+  pin/port paths, with one bit selected for a bus; anonymous `#id` paths work.
+- `export_schematic(file="cone.svg", traces=["top.u_cpu.D[3]"])`: renders
+  directly from the loaded design, without starting a browser. Use `.png`
+  for PNG (`scale=2` for twice the resolution). Combine `instances`, `nets`
+  and `traces` lists, up to 200 total targets. Instances draw boxes; nets and
+  traces take pin/port paths. The top has no box: use its ports instead.
+  Returns the local file path, format and byte size; overwrites an existing
+  file. The renderer is included in supported platform wheels.
+
+`open_schematic` and `export_schematic` accept `view_options`, for example
+`{"instance_label": "both", "max_sinks": 16, "group_by": "role"}`.
+Labels can show `name`, `model` or `both`; excess sinks can be grouped by
+`model`, `hierarchy`, `role` or `pin`. Set `max_sinks=0` to draw every sink.
+Exports also accept `title`, `caption`, `legend` and `hide_ui_glyphs` inside
+`view_options`. Each export is a fresh drawing from its explicit targets and
+options; browser annotations and traces are independent.
 
 The viewer shares the existing raw naja universe; it does not elaborate again.
 The server binds to loopback and returns a token-bearing URL. Open that URL on

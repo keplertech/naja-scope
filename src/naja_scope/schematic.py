@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Thin optional integration with naja-schematic's public ViewerServer API."""
+"""Optional browser and headless rendering over the current raw naja universe."""
 from __future__ import annotations
 
 import atexit
+import re
+from pathlib import Path
+
+from najaeda import naja
 
 from . import snl
 from .errors import ScopeError
@@ -14,14 +18,58 @@ MAX_ANNOTATIONS = 200
 _viewer = None
 
 
+def _package():
+    try:
+        import naja_schematic
+        # Import the required public entry points so older installations get
+        # the same actionable error as a missing optional dependency.
+        from naja_schematic import ViewerServer, export_svg, export_png
+    except ImportError as exc:
+        raise ScopeError('Schematic tools require naja-schematic>=0.3.0; '
+                         'install "naja-scope[schematic]".') from exc
+    return naja_schematic
+
+
+def _options(options):
+    if options is None:
+        return None
+    if not isinstance(options, dict):
+        raise ScopeError("Schematic view_options must be an object.")
+    _package()
+    from naja_schematic.protocol import view_options
+    try:
+        view_options(options)
+    except (ValueError, TypeError) as exc:
+        raise ScopeError(str(exc)) from exc
+    return options
+
+
+def _resolve_one(path, kind):
+    if not isinstance(path, str):
+        raise ScopeError("Schematic targets must be naja-scope path strings.")
+    matches = resolve_path(SESSION, path, kind=kind)
+    if len(matches) != 1 or matches[0].kind != kind:
+        raise ScopeError(f"Schematic target requires one {kind}.")
+    return matches[0]
+
+
+def _pin(path):
+    resolved = _resolve_one(path, "term")
+    if resolved.bit is None and snl.obj_width(resolved.obj) != 1:
+        raise ScopeError("Select one bus bit for a schematic net or trace.")
+    # IDs preserve anonymous instances and names containing punctuation.
+    # The terminal ID avoids a second name-based lookup upstream.
+    bit = resolved.bit
+    if bit is None and isinstance(resolved.obj, naja.SNLBusTerm):
+        bit = resolved.obj.getMSB()
+    return (list(resolved.owner.snlpath.getInstanceIDs()),
+            resolved.obj.getID(), bit)
+
+
 def _server():
     global _viewer
     if _viewer is None:
-        try:
-            from naja_schematic import ViewerServer
-        except ImportError as exc:
-            raise ScopeError('Schematic tools require naja-schematic>=0.2.0; '
-                             'install "naja-scope[schematic]".') from exc
+        ViewerServer = _package().ViewerServer
         # naja-schematic>=0.2 resolves relative source references (Show
         # Sources) against these roots; they are fixed at viewer creation.
         viewer = ViewerServer(lock=DESIGN_LOCK,
@@ -54,8 +102,9 @@ atexit.register(close)
 
 
 @serialized
-def open_schematic(path=None):
+def open_schematic(path=None, view_options=None):
     SESSION.require_top()
+    options = _options(view_options)
     if path is None:
         node = SESSION.require_top()
     else:
@@ -64,9 +113,61 @@ def open_schematic(path=None):
             raise ScopeError("Schematic focus requires one instance.")
         node = matches[0].obj
     viewer = _server()
+    if options is not None:
+        viewer.view_options(options)
     viewer.show_instance(list(node.snlpath.getInstanceIDs()))
     return {"url": viewer.url, "path": node.path,
             "note": "Open this URL in a browser on the MCP server's machine."}
+
+
+@serialized
+def show_schematic_net(path, trace=False, add=True, color=None):
+    SESSION.require_top()
+    pin = _pin(path)
+    if type(trace) is not bool or type(add) is not bool:
+        raise ScopeError("Schematic trace and add must be booleans.")
+    if color is not None and (not isinstance(color, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", color)):
+        raise ScopeError("Schematic color must be #rrggbb.")
+    try:
+        viewer = _server()
+        viewer.show_net(pin, trace=trace, add=add, color=color)
+    except (ValueError, TypeError) as exc:
+        raise ScopeError(str(exc)) from exc
+    return {"url": viewer.url, "path": path, "trace": trace}
+
+
+@serialized
+def export_schematic(file, instances=None, nets=None, traces=None,
+                     view_options=None, scale=1.0):
+    SESSION.require_top()
+    if not isinstance(file, str) or not file:
+        raise ScopeError("Provide a destination .svg or .png file.")
+    destination = Path(file).expanduser().absolute()
+    suffix = destination.suffix.lower()
+    if suffix not in (".svg", ".png"):
+        raise ScopeError("Schematic export file must end in .svg or .png.")
+    groups = [group if group is not None else [] for group in (instances, nets, traces)]
+    if any(not isinstance(group, list) for group in groups) or not 1 <= sum(map(len, groups)) <= 200:
+        raise ScopeError("Provide lists containing 1 to 200 total instances, nets or traces.")
+    insts = [_resolve_one(path, "instance").obj.snlpath for path in groups[0]]
+    if any(not list(path.getInstanceIDs()) for path in insts):
+        raise ScopeError("The top has no schematic box; export nets or traces on its ports.")
+    pins = [_pin(path) for path in groups[1]]
+    cones = [_pin(path) for path in groups[2]]
+    options = _options(view_options)
+    package = _package()
+    kwargs = dict(instances=insts, nets=pins, traces=cones, view_options=options,
+                  source_roots=tuple(SESSION.source_dirs))
+    try:
+        if suffix == ".png":
+            package.export_png(path=str(destination), scale=scale, **kwargs)
+        else:
+            package.export_svg(path=str(destination), **kwargs)
+        size = destination.stat().st_size
+    except (OSError, RuntimeError, ValueError, TypeError) as exc:
+        raise ScopeError(f"Cannot export schematic: {exc}") from exc
+    return {"file": str(destination), "format": suffix[1:],
+            "bytes": size}
 
 
 @serialized

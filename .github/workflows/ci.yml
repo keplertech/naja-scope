@@ -94,7 +94,7 @@ jobs:
           python -m pip install --upgrade pip
           # These are the platforms for which najaeda promises binary wheels;
           # fail clearly if the expected native artifact is absent.
-          python -m pip install --only-binary=najaeda -e . pytest
+          python -m pip install --only-binary=najaeda -e ".[schematic]" pytest
 
       - name: Run tests
         run: python -m pytest -q
