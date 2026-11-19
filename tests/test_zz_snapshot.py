@@ -36,9 +36,9 @@ def test_snapshot_reload_roundtrip(uart_session, tmp_path):
 
     # Named paths, anonymous `#id` paths, and source ranges survive the
     # round-trip (the `#id` segment is the FF's snapshot-stable getID()).
-    out = api.resolve("uart_top.u_tx.u_div_cnt")
-    assert out["matches"][0]["path"] == "uart_top.u_tx.u_div_cnt"
-    drivers = api.get_drivers("uart_top.tx_o")
+    out = api.resolve(['uart_top', 'u_tx', 'u_div_cnt'])
+    assert out["matches"][0]["path"] == ['uart_top', 'u_tx', 'u_div_cnt']
+    drivers = api.get_drivers(['uart_top', 'tx_o'])
     leaf_path = drivers["leaf_drivers"][0]["path"]
     src = api.get_source(leaf_path)
     assert "always_ff" in src.get("text", "")
@@ -66,7 +66,7 @@ def test_snapshot_reload_with_intent(uart_session, tmp_path):
     if not loaded.get("intent_loaded"):
         pytest.skip("naja build without the SNL↔slang link (keep_ast_link)")
     # uart_tx carries a DIV_W parameter + IDLE/START/DATA/STOP localparams.
-    params = api.get_intent("uart_top.u_tx", want="parameters")
+    params = api.get_intent(['uart_top', 'u_tx'], want="parameters")
     names = {p["name"] for p in params["parameters"]}
     assert "DIV_W" in names
 

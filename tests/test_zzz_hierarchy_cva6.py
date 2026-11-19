@@ -20,8 +20,9 @@ import pytest
 
 from naja_scope import api
 
-_SNAP = os.path.join(os.path.dirname(__file__), "..", "internal", "eval",
-                     ".cache", "cva6-small", "snapshot")
+_SNAP = os.environ.get("NAJA_SCOPE_CVA6_SNAPSHOT") or os.path.join(
+    os.path.dirname(__file__), "..", "internal", "eval", ".cache",
+    "cva6-small", "snapshot")
 
 pytestmark = pytest.mark.skipif(
     not os.path.isfile(os.path.join(_SNAP, "snl.mf")),

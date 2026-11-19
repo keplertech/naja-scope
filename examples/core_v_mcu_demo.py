@@ -51,10 +51,11 @@ EXPECTED_BLACKBOXES = {
 }
 
 # A pulp_sync_wedge CDC synchronizer buried in the eFPGA subsystem.
-CDC_CLOCK_PIN = (
-    "core_v_mcu.i_soc_domain.soc_peripherals_i.i_efpga_subsystem."
+CDC_CLOCK_PIN = [
+    "core_v_mcu", "i_soc_domain", "soc_peripherals_i", "i_efpga_subsystem",
     "core_v_mcu_i_soc_domain_soc_peripherals_i_i_efpga_subsystem_"
-    "event_wedge_edge_2_i_wedge_efpga.clk_i")
+    "event_wedge_edge_2_i_wedge_efpga", "clk_i",
+]
 
 
 def banner(title):

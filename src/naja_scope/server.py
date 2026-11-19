@@ -20,7 +20,7 @@ if _najaeda_src:
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent, ToolAnnotations
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import api
 from .errors import ScopeError
@@ -103,9 +103,24 @@ def _tool(*, annotations: ToolAnnotations) -> Callable:
     return decorator
 
 
+class SignalTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: List[str]
+    bit: Optional[int] = None
+
+
+class AnnotationTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: List[str]
+    bit: Optional[int] = None
+    kind: Literal["instance", "term"] = "instance"
+    severity: Literal["info", "warning", "error"] = "info"
+    message: str = ""
+
+
 @_tool(annotations=SESSION_MUTATION)
 def open_schematic(
-    path: Annotated[Optional[str], Field(description="Instance path to focus; omit for the top.")] = None,
+    path: Annotated[Optional[List[str]], Field(description="Instance path to focus; omit for the top.")] = None,
     view_options: Annotated[Optional[dict], Field(description="Drawing options: instance_label (name/model/both), sink_rows, max_sinks (0 = all), group_by (model/hierarchy/role/pin), convergence_outline.")] = None,
 ) -> Dict[str, Any]:
     """Serve an interactive browser schematic of the current design. Returns a
@@ -116,38 +131,42 @@ def open_schematic(
 
 @_tool(annotations=SESSION_MUTATION)
 def show_schematic_net(
-    path: Annotated[str, Field(description="Scope pin/port path, e.g. top.u_cpu.D[3]. Select one bit of a bus.")],
+    path: Annotated[List[str], Field(description="Exact pin/port names, e.g. ['top', 'u_cpu', 'D']; select a bus bit with bit.")],
     trace: Annotated[bool, Field(description="Draw the combinational fan-in cone back to flops, ports and blackboxes.")] = False,
     add: Annotated[bool, Field(description="Add to existing traces; false clears the drawing first.")] = True,
     color: Annotated[Optional[str], Field(description="Optional trace color, #rrggbb.")] = None,
+    bit: Annotated[Optional[int], Field(description="Bus bit index, separate from the literal name; omit for the whole object.")] = None,
 ) -> Dict[str, Any]:
     """Draw a pin's net or fan-in cone in the browser schematic. Returns a
     local viewer URL. Uses the current design; supports anonymous #id paths."""
-    return api.show_schematic_net(path, trace, add, color)
+    return api.show_schematic_net(path, trace, add, color, bit=bit)
 
 
 @_tool(annotations=FILESYSTEM_WRITE)
 def export_schematic(
     file: Annotated[str, Field(description="Local destination .svg or .png file; existing file may be overwritten.")],
-    instances: Annotated[Optional[List[str]], Field(description="Scope instance paths to draw as boxes; excludes the top.")] = None,
-    nets: Annotated[Optional[List[str]], Field(description="Scope pin/port paths for one-net traces; select bus bits.")] = None,
-    traces: Annotated[Optional[List[str]], Field(description="Scope pin/port paths for combinational fan-in cones; select bus bits.")] = None,
+    instances: Annotated[Optional[List[List[str]]], Field(description="Scope instance paths to draw as boxes; excludes the top.")] = None,
+    nets: Annotated[Optional[List[SignalTarget]], Field(description="Scope pin/port paths for one-net traces; select bus bits.")] = None,
+    traces: Annotated[Optional[List[SignalTarget]], Field(description="Scope pin/port paths for combinational fan-in cones; select bus bits.")] = None,
     view_options: Annotated[Optional[dict], Field(description="Drawing options as open_schematic; also title, caption, legend, hide_ui_glyphs for exports.")] = None,
     scale: Annotated[float, Field(description="PNG pixels per SVG pixel (0 < scale <= 64); ignored for SVG.")] = 1.0,
 ) -> Dict[str, Any]:
     """Export a fresh schematic from the loaded design without a browser.
     Supply 1–200 total targets. Returns file, format and byte size, without
     embedding image data. Browser annotations and traces are independent."""
-    return api.export_schematic(file, instances, nets, traces, view_options, scale)
+    return api.export_schematic(file, instances,
+                                [n.model_dump() for n in nets] if nets is not None else None,
+                                [t.model_dump() for t in traces] if traces is not None else None,
+                                view_options, scale)
 
 
 @_tool(annotations=SESSION_MUTATION)
 def annotate_schematic(
-    items: Annotated[List[dict], Field(description="Up to 200 annotations: path (scope path), kind (instance or term), severity (info, warning, error), message (up to 2000 characters). Whole pins/ports only; [] clears overlays.")],
+    items: Annotated[List[AnnotationTarget], Field(description="Up to 200 annotations: path (scope path), kind (instance or term), severity (info, warning, error), message (up to 2000 characters). Whole pins/ports only; [] clears overlays.")],
 ) -> Dict[str, Any]:
     """Replace schematic annotations on instances or pins/ports. Returns the
     local viewer URL and count. Annotations clear when the design changes."""
-    return api.annotate_schematic(items)
+    return api.annotate_schematic([item.model_dump() for item in items])
 
 
 @_tool(annotations=READ_ONLY)
@@ -375,9 +394,8 @@ def reset_universe() -> Dict[str, Any]:
 @_tool(annotations=READ_ONLY)
 def resolve(
     path: Annotated[
-        str,
-        Field(description="Hierarchical object path; the final segment may "
-                          "be a glob or bit select."),
+        List[str],
+        Field(description="List of exact names; optional top first. Use the separate bit field."),
     ],
     kind: Annotated[
         Optional[Literal["instance", "term", "net"]],
@@ -387,20 +405,21 @@ def resolve(
         Optional[int],
         Field(description="Maximum matches to return; defaults to 20 and is capped at 200."),
     ] = None,
+    bit: Annotated[Optional[int], Field(description="Bus bit index, separate from the literal name; omit for the whole object.")] = None,
 ) -> Dict[str, Any]:
     """Resolve a known hierarchical object path to instance, term, or net
-    descriptors with source references. The final segment accepts a glob and
-    bit selects (for example `top.u_uart.tx_o[0]`). Use find when the path is
+    descriptors with source references. Every list element is literal.
+    Example: path=["top", "u_uart", "tx_o"], bit=0. Use find when the path is
     unknown; use get_hierarchy to browse children. This read-only query requires
     a loaded design and returns did-you-mean suggestions on failure."""
-    return api.resolve(path, kind, limit)
+    return api.resolve(path, kind, limit, bit=bit)
 
 
 @_tool(annotations=READ_ONLY)
 def find(
     pattern: Annotated[
-        str,
-        Field(description="Case-sensitive glob; include a dot to match full hierarchical paths."),
+        List[str],
+        Field(description="List of per-element case-sensitive globs. Use ** for recursive descent; optional top first."),
     ],
     kind: Annotated[
         Literal["instance", "net", "port", "module", "any"],
@@ -418,8 +437,8 @@ def find(
 ) -> Dict[str, Any]:
     """Search case-sensitive object names across the loaded design with a glob.
     Use this when an exact path is unknown; use resolve once a path is known or
-    get_hierarchy to browse structure. A dot in `pattern` switches matching to
-    full hierarchical paths. Use '*state*', not the regex '.*state.*'.
+    get_hierarchy to browse structure. Use ["**", "*state*"] to search
+    names at any depth. Each glob matches exactly one name; ** matches zero or more levels.
     Parameters and package members are source intent: use get_intent.
     Returns typed descriptors in `matches` plus
     `count`, `has_more`, and an opaque `next_cursor` for pagination."""
@@ -429,7 +448,7 @@ def find(
 @_tool(annotations=READ_ONLY)
 def get_hierarchy(
     path: Annotated[
-        Optional[str],
+        Optional[List[str]],
         Field(description="Hierarchical instance path; omit to start at the top instance."),
     ] = None,
     depth: Annotated[
@@ -458,13 +477,14 @@ def get_hierarchy(
 @_tool(annotations=READ_ONLY)
 def get_drivers(
     path: Annotated[
-        str,
+        List[str],
         Field(description="Exact hierarchical path to a term or net in the loaded design."),
     ],
     limit: Annotated[
         Optional[int],
         Field(description="Maximum endpoint entries; defaults to 20 and is capped at 200."),
     ] = None,
+    bit: Annotated[Optional[int], Field(description="Bus bit index, separate from the literal name; omit for the whole object.")] = None,
 ) -> Dict[str, Any]:
     """List the immediate upstream endpoints that drive a term or net across
     hierarchy. Use this for direct sources; use get_loads for downstream readers
@@ -472,22 +492,23 @@ def get_drivers(
     (FF/gate instances with pin, model, source ref) and top-level ports.
     Lowered assign glue is traversed rather than reported as an endpoint.
     Literal assign drivers include `constant` (0, 1, X, or Z); bus entries
-    include the driven `bit`.
+    include `queried_bit`; endpoint pin indices use `pin_bit`.
     Capped at limit (default 20, max 200) with a `truncated` flag; no cursor —
     raise limit to see more."""
-    return api.get_drivers(path, limit)
+    return api.get_drivers(path, limit, bit=bit)
 
 
 @_tool(annotations=READ_ONLY)
 def get_loads(
     path: Annotated[
-        str,
+        List[str],
         Field(description="Exact hierarchical path to a term or net in the loaded design."),
     ],
     limit: Annotated[
         Optional[int],
         Field(description="Maximum endpoint entries; defaults to 20 and is capped at 200."),
     ] = None,
+    bit: Annotated[Optional[int], Field(description="Bus bit index, separate from the literal name; omit for the whole object.")] = None,
 ) -> Dict[str, Any]:
     """List the immediate downstream endpoints that consume a term or net
     across hierarchy. Use this for direct readers; use get_drivers for upstream
@@ -497,13 +518,13 @@ def get_loads(
     glue is traversed rather than reported as an endpoint.
     Capped at limit (default 20, max 200) with a `truncated` flag; no cursor —
     raise limit to see more."""
-    return api.get_loads(path, limit)
+    return api.get_loads(path, limit, bit=bit)
 
 
 @_tool(annotations=READ_ONLY)
 def trace_cone(
     path: Annotated[
-        str,
+        List[str],
         Field(description="Exact hierarchical path to the cone's root term or net."),
     ],
     direction: Annotated[
@@ -514,6 +535,7 @@ def trace_cone(
         int,
         Field(description="Maximum listed endpoints per frontier kind; clamped to 1..200."),
     ] = 50,
+    bit: Annotated[Optional[int], Field(description="Bus bit index, separate from the literal name; omit for the whole object.")] = None,
 ) -> Dict[str, Any]:
     """Trace the combinational fanin/fanout cone of a term/net via naja's
     LogicCone. Use this for transitive logic reachability; use get_drivers or
@@ -526,13 +548,13 @@ def trace_cone(
     `cross_hierarchy` groups the flop frontier by top-level submodule and, under
     outside_root_subtree, names the frontier registers that live OUTSIDE the
     cone root's own subtree (the cross-hierarchy answer) — read it directly."""
-    return api.trace_cone(path, direction, max_frontier)
+    return api.trace_cone(path, direction, max_frontier, bit=bit)
 
 
 @_tool(annotations=READ_ONLY)
 def get_source(
     path: Annotated[
-        str,
+        List[str],
         Field(description="Exact hierarchical path to a loaded design object."),
     ],
     context_lines: Annotated[
@@ -545,6 +567,7 @@ def get_source(
                           "upstream source (e.g. the RTL behind a Yosys "
                           "netlist cell) instead of its declaration."),
     ] = None,
+    bit: Annotated[Optional[int], Field(description="Bus bit index, separate from the literal name; omit for the whole object.")] = None,
 ) -> Dict[str, Any]:
     """Read the bounded source excerpt that produced an object (for example,
     an SV FF instance maps to its `always_ff` block; a netlist cell maps to its
@@ -553,7 +576,7 @@ def get_source(
     (e.g. Yosys src attributes), call again with origin=N to read that RTL.
     Returns object, file, start/end range, text, and truncation status without
     modifying files; missing paths and source ranges return structured errors."""
-    return api.get_source(path, context_lines, origin)
+    return api.get_source(path, context_lines, origin, bit=bit)
 
 
 @_tool(annotations=READ_ONLY)
@@ -589,7 +612,7 @@ def get_content_hash(
 @_tool(annotations=READ_ONLY)
 def get_stats(
     path: Annotated[
-        Optional[str],
+        Optional[List[str]],
         Field(description="Hierarchical instance path; omit to summarize the top design."),
     ] = None,
     limit: Annotated[
@@ -617,27 +640,26 @@ def get_stats(
 @_tool(annotations=READ_ONLY)
 def get_intent(
     ref: Annotated[
-        str,
-        Field(description="Hierarchical object/instance path or package "
-                          "parameter path (top.inst.PARAM), package name, or "
-                          "member such as pkg::NAME."),
+        List[str],
+        Field(description="List of exact object/instance/parameter names. Package name or pkg::NAME is a single-element list."),
     ],
     want: Annotated[
         Literal["auto", "type", "fsm_states", "parameters"],
         Field(description="Intent fact to retrieve; auto selects from the reference."),
     ] = "auto",
+    bit: Annotated[Optional[int], Field(description="Bus bit index, separate from the literal name; omit for the whole object.")] = None,
 ) -> Dict[str, Any]:
     """Retrieve source-level intent that netlist lowering erases (warm-only).
     Use when the answer is in the SystemVerilog or VHDL *type/declaration*, not
     the flattened gates: enum/typedef state names + encodings (incl. PACKAGE
     typedefs whose members live in another file), and symbolic PARAMETER or
     generic expressions (the formula behind a baked-in width).
-    ref: a hierarchical path ('cva6.csr_regfile_i.priv_lvl_q'), a package member
-    ('riscv::PLEN'), a parameter path ('top.inst.PARAM'), an instance path
-    for its parameters, or a bare package name to list its parameters.
+    ref: an exact-name list (["cva6", "csr_regfile_i", "priv_lvl_q"]),
+    a package member (["riscv::PLEN"]), a parameter (["top", "inst", "PARAM"]),
+    an instance list for its parameters, or ["pkg"] to list package parameters.
     want: auto | type | fsm_states | parameters. If the intent layer is not
     loaded, returns a note and you should fall back to get_source."""
-    return api.get_intent(ref, want)
+    return api.get_intent(ref, want, bit=bit)
 
 
 @_tool(annotations=SESSION_REPLACEMENT)

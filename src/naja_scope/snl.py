@@ -222,7 +222,13 @@ def inst_segment(inst) -> str:
     """The addressable path segment for an instance: its SV name, or `#<id>`
     for an anonymous (lowered) instance. Stable across snapshot reload."""
     name = inst.getName()
-    return name if name else f"#{inst.getID()}"
+    if name:
+        return name
+    segment = f"#{inst.getID()}"
+    # Keep anonymous addresses distinct from literal names such as "#0".
+    while inst.getDesign().getInstance(segment) is not None:
+        segment = "#" + segment
+    return segment
 
 
 def friendly_label(inst) -> str:
@@ -249,12 +255,16 @@ def friendly_label(inst) -> str:
 def instance_by_segment(design, segment: str):
     """Inverse of inst_segment: resolve a path segment to a child instance —
     `#<id>` via getInstanceByID, otherwise by SV name."""
+    named = design.getInstance(segment)
+    if named is not None:
+        return named
     if segment.startswith("#"):
         try:
-            return design.getInstanceByID(int(segment[1:]))
-        except (ValueError, Exception):
+            inst = design.getInstanceByID(int(segment.lstrip("#")))
+            return inst if inst is not None and not inst.getName() and inst_segment(inst) == segment else None
+        except (ValueError, RuntimeError):
             return None
-    return design.getInstance(segment)
+    return None
 
 
 # -- hierarchical instance occurrences ---------------------------------------
@@ -263,7 +273,7 @@ def instance_by_segment(design, segment: str):
 class InstNode:
     """A hierarchical instance occurrence.
 
-    `names` is the dotted path including the top name (("uart_top", "u_tx"));
+    `names` is the tuple of exact names including the top name (("uart_top", "u_tx"));
     `design` is the model (the contents of this instance); `snl_instance` is the
     SNLInstance (None for the top); `snlpath` is the matching SNLPath used to
     build occurrences/equipotentials.
@@ -282,8 +292,8 @@ class InstNode:
         return self.names[-1]
 
     @property
-    def path(self) -> str:
-        return ".".join(self.names)
+    def path(self) -> List[str]:
+        return list(self.names)
 
     @property
     def model_name(self) -> str:
@@ -368,7 +378,7 @@ def node_from_ids(id_list: List[int]) -> InstNode:
     return InstNode(tuple(names), design, inst, snlpath)
 
 
-def path_str_from_ids(id_list: List[int]) -> str:
+def path_from_ids(id_list: List[int]) -> List[str]:
     design = top_design()
     parts = [design.getName()]
     for i in id_list:
@@ -377,7 +387,7 @@ def path_str_from_ids(id_list: List[int]) -> str:
             break
         parts.append(inst_segment(inst))
         design = inst.getModel()
-    return ".".join(parts)
+    return parts
 
 
 # -- terms / nets ------------------------------------------------------------

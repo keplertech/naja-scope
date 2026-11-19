@@ -34,7 +34,10 @@ def _leaf_entry(inst_term, id_list, queried_bit=None) -> dict:
     inst = inst_term.getInstance()
     model = inst.getModel()
     entry = {
-        "path": snl.path_str_from_ids(id_list),
+        "path": snl.path_from_ids(id_list),
+        "kind": "instance",
+        "bit": None,
+        "pin_bit": inst_term.getBitTerm().getBit() if type(inst_term.getBitTerm()).__name__ == "SNLBusTermBit" else None,
         "label": snl.friendly_label(inst),
         "model": model.getName(),
         "pin": inst_term.getBitTerm().getName(),
@@ -47,7 +50,7 @@ def _leaf_entry(inst_term, id_list, queried_bit=None) -> dict:
     if constant is not None:
         entry["constant"] = constant
     if queried_bit is not None:
-        entry["bit"] = queried_bit
+        entry["queried_bit"] = queried_bit
     loc = snl.source_loc(inst)
     if loc:
         entry["src"] = SrcRange.from_loc(loc).to_ref()
@@ -62,8 +65,10 @@ def _top_entry(term) -> dict:
             bit = term.getBit()
         except Exception:
             bit = None
-    port = f"{top_name}.{term.getName()}" + (f"[{bit}]" if bit is not None else "")
-    return {"port": port, "dir": snl.direction_str(term.getDirection())}
+    port = [top_name, term.getName()]
+    return {"port": port, "path": port, "kind": "term", "bit": bit,
+            "dir": snl.direction_str(term.getDirection())}
+
 
 
 def _constant_assign_driver(resolved: Resolved, bit, queried_bit,
@@ -125,7 +130,7 @@ def endpoints(resolved: Resolved, session, want: str, limit: int) -> dict:
             ids = list(occ.getPath().getInstanceIDs())
             ids.append(inst.getID())
             entry = _leaf_entry(it, ids, queried_bit)
-            key = (entry["path"], entry["pin"])
+            key = (tuple(entry["path"]), entry["pin"], entry["pin_bit"])
             if key in seen:
                 continue
             seen.add(key)
@@ -139,7 +144,7 @@ def endpoints(resolved: Resolved, session, want: str, limit: int) -> dict:
                 resolved, bit, queried_bit, value) if value is not None
                 else None)
             if entry is not None:
-                key = (entry["path"], entry["pin"])
+                key = (tuple(entry["path"]), entry["pin"], entry["pin_bit"])
                 if key not in seen:
                     seen.add(key)
                     if len(leaf) >= limit:
@@ -150,7 +155,7 @@ def endpoints(resolved: Resolved, session, want: str, limit: int) -> dict:
             if term.getDirection() == top_exclude:
                 continue
             entry = _top_entry(term)
-            key = ("top", entry["port"])
+            key = ("top", tuple(entry["port"]), entry["bit"])
             if key in seen:
                 continue
             seen.add(key)
@@ -162,7 +167,7 @@ def endpoints(resolved: Resolved, session, want: str, limit: int) -> dict:
             break
 
     out = {
-        "object": resolved.path,
+        "object": resolved.path, "bit": resolved.bit, "kind": resolved.kind,
         "bits_queried": len(bits),
         f"leaf_{want}": leaf,
         f"top_{want}": top,

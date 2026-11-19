@@ -94,7 +94,7 @@ def loaded(sources):
 
 
 def test_enum_states_declared_in_package(loaded):
-    rec = api.get_intent("fsm_top.state", want="fsm_states")
+    rec = api.get_intent(['fsm_top', 'state'], want="fsm_states")
     assert rec["type"] == "fsm_pkg::state_t"
     assert rec["canonical_kind"] == "enum"
     assert rec["enum"]["width"] == 2
@@ -109,7 +109,7 @@ def test_enum_states_declared_in_package(loaded):
 
 
 def test_record_fields_report_widths(loaded):
-    rec = api.get_intent("fsm_top.r")
+    rec = api.get_intent(['fsm_top', 'r'])
     assert rec["type"] == "rec_t"
     assert rec["canonical_kind"] == "record"
     assert rec["struct"]["width"] == 3
@@ -120,7 +120,7 @@ def test_record_fields_report_widths(loaded):
 
 
 def test_array_keeps_symbolic_constraint(loaded):
-    rec = api.get_intent("fsm_top.dv", want="type")
+    rec = api.get_intent(['fsm_top', 'dv'], want="type")
     assert rec["type"] == "std_logic_vector"
     assert rec["canonical_kind"] == "array"
     assert rec["ranges"] == ["3 downto 0"]
@@ -128,7 +128,7 @@ def test_array_keeps_symbolic_constraint(loaded):
 
 
 def test_non_enum_fsm_query_notes(loaded):
-    rec = api.get_intent("fsm_top.clk", want="fsm_states")
+    rec = api.get_intent(['fsm_top', 'clk'], want="fsm_states")
     assert rec["type"] == "std_logic"
     assert rec["canonical_kind"] == "scalar"
     assert "enum" not in rec
@@ -136,7 +136,7 @@ def test_non_enum_fsm_query_notes(loaded):
 
 
 def test_generic_override_omits_package_constants(loaded):
-    rec = api.get_intent("fsm_top.u0")
+    rec = api.get_intent(['fsm_top', 'u0'])
     assert rec["intent"] == "parameters"
     params = {p["name"]: p for p in rec["parameters"]}
     assert params["N"]["value"] == "4"
@@ -148,27 +148,27 @@ def test_generic_override_omits_package_constants(loaded):
 
 
 def test_package_members_any_case(loaded):
-    constant = api.get_intent("fsm_pkg::width")
+    constant = api.get_intent(['fsm_pkg::width'])
     assert constant["intent"] == "parameter"
     assert constant["value"] == "4"
     assert constant["expr"] == "2 + 2"
-    typedef = api.get_intent("FSM_PKG::state_t")
+    typedef = api.get_intent(['FSM_PKG::state_t'])
     assert [m["name"] for m in typedef["enum"]["members"]] == ["IDLE", "RUN", "DONE"]
-    assert "error" in api.get_intent("fsm_pkg::missing")
+    assert "error" in api.get_intent(['fsm_pkg::missing'])
 
 
 def test_parameter_navigation(loaded):
     for want in ("auto", "parameters"):
-        assert api.get_intent("fsm_top.u0.n", want=want)["value"] == "4"
-        assert api.get_intent("FSM_PKG", want=want)["parameters"][0]["value"] == "4"
-        assert api.get_intent("fsm_pkg::width", want=want)["value"] == "4"
+        assert api.get_intent(['fsm_top', 'u0', 'n'], want=want)["value"] == "4"
+        assert api.get_intent(['FSM_PKG'], want=want)["parameters"][0]["value"] == "4"
+        assert api.get_intent(['fsm_pkg::width'], want=want)["value"] == "4"
 
 
 def test_inferred_flop_answers_with_a_note(loaded):
     top = SESSION.require_top()
     ff = next(i for i in top.design.getInstances()
               if i.getModel().getName().startswith("naja_dff"))
-    assert "no source type" in api.get_intent(f"fsm_top.#{ff.getID()}", want="type")["note"]
+    assert "no source type" in api.get_intent(['fsm_top', f'#{ff.getID()}'], want="type")["note"]
 
 
 def test_load_intent_reelaborates_file_by_file_session(sources):
@@ -176,11 +176,11 @@ def test_load_intent_reelaborates_file_by_file_session(sources):
         api.load_vhdl(sources[0])
         api.load_vhdl(sources[1], top="fsm_top")
     assert api.status()["intent_loaded"] is False
-    assert "intent_loaded" in api.get_intent("fsm_top.state")
+    assert "intent_loaded" in api.get_intent(['fsm_top', 'state'])
     with pytest.warns(RuntimeWarning, match="Beta"):
         assert api.load_intent() == {"intent_loaded": True}
     assert api.status()["top"]["model"] == "fsm_top"
-    assert api.get_intent("fsm_top.state")["type"] == "fsm_pkg::state_t"
+    assert api.get_intent(['fsm_top', 'state'])["type"] == "fsm_pkg::state_t"
     # Already live: nothing is re-elaborated, so the design handle survives.
     top = SESSION.require_top().design
     api.load_intent()
@@ -210,7 +210,7 @@ def test_snapshot_reload_with_intent(loaded, tmp_path):
     SESSION.reset()
     with pytest.warns(RuntimeWarning, match="Beta"):
         assert api.load_snapshot(snapshot, intent=True)["intent_loaded"] is True
-    assert api.get_intent("fsm_top.state")["enum"]["width"] == 2
+    assert api.get_intent(['fsm_top', 'state'])["enum"]["width"] == 2
 
 
 def test_flist_rejected(sources):
@@ -243,8 +243,8 @@ def test_moved_sources_keep_the_snapshot_design(sources, tmp_path, monkeypatch):
 
 
 def test_package_type_is_labelled_a_type(loaded):
-    assert api.get_intent("fsm_pkg::state_t")["intent"] == "type"
-    assert api.get_intent("fsm_pkg::WIDTH")["intent"] == "parameter"
+    assert api.get_intent(['fsm_pkg::state_t'])["intent"] == "type"
+    assert api.get_intent(['fsm_pkg::WIDTH'])["intent"] == "parameter"
 
 
 NESTED = """
@@ -296,11 +296,11 @@ def test_paths_through_generate_labels_and_record_fsm(tmp_path):
     children = [c["name"] for c in api.get_hierarchy()["root"]["children"]]
     leaf = next(name for name in children if name.endswith("u_leaf"))
     assert "." in leaf
-    assert api.resolve(f"gen_top.{leaf}")["matches"][0]["model"] == "leaf"
-    assert api.get_intent(f"gen_top.{leaf}.hold", want="type")["type"] == "std_logic"
-    assert api.resolve(f"gen_top.{leaf}.y")["matches"][0]["kind"] == "term"
-    assert "text" in api.get_source(f"gen_top.{leaf}.hold", context_lines=0)
-    rec = api.get_intent("gen_top.ctl", want="fsm_states")
+    assert api.resolve(['gen_top', leaf])["matches"][0]["model"] == "leaf"
+    assert api.get_intent(['gen_top', leaf, 'hold'], want="type")["type"] == "std_logic"
+    assert api.resolve(['gen_top', leaf, 'y'])["matches"][0]["kind"] == "term"
+    assert "text" in api.get_source(['gen_top', leaf, 'hold'], context_lines=0)
+    rec = api.get_intent(['gen_top', 'ctl'], want="fsm_states")
     assert "note" not in rec
     state = next(f for f in rec["struct"]["fields"] if f["name"] == "state")
     assert [m["name"] for m in state["enum"]["members"]] == ["P_IDLE", "P_BUSY"]
@@ -336,5 +336,5 @@ end architecture;
     # Intent re-elaboration needs the library back from the snapshot metadata.
     with pytest.warns(RuntimeWarning, match="Beta"):
         assert api.load_snapshot(snapshot, intent=True)["intent_loaded"] is True
-    assert api.get_intent("mylib_not_used::W").get("error")
-    assert api.get_intent("p::W")["value"] == "1"
+    assert api.get_intent(['mylib_not_used::W']).get("error")
+    assert api.get_intent(['p::W'])["value"] == "1"

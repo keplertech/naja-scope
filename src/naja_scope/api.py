@@ -8,7 +8,6 @@ import contextlib
 import fnmatch
 import io
 import os
-import re
 from typing import List, Optional, Union
 
 from najaeda import naja
@@ -205,48 +204,40 @@ def reset_universe() -> dict:
 # -- navigation ----------------------------------------------------------------
 
 @serialized
-def resolve(path: str, kind: Optional[str] = None,
-            limit: Optional[int] = None) -> dict:
+def resolve(path: List[str], kind: Optional[str] = None,
+            limit: Optional[int] = None, bit: Optional[int] = None) -> dict:
     limit = clamp_limit(limit, default=20)
-    matches = resolve_path(SESSION, path, kind=kind)
+    matches = resolve_path(SESSION, path, kind=kind, bit=bit)
     described = [describe(m, SESSION) for m in matches[:limit]]
     return {"matches": described,
             "truncated": len(matches) > limit}
 
 
 @serialized
-def find(pattern: str, kind: str = "any", limit: Optional[int] = None,
+def find(pattern: List[str], kind: str = "any", limit: Optional[int] = None,
          cursor: Optional[str] = None) -> dict:
-    """DFS over the hierarchy matching names (and full paths if the pattern
-    contains a dot). kind: instance|net|port|module|any."""
+    """DFS over exact-name levels using per-element globs and recursive **."""
     if kind not in ("instance", "net", "port", "module", "any"):
         raise ScopeError("kind must be instance|net|port|module|any.")
     top = SESSION.require_top()
-    # Diagnose common regex syntax before an expensive hierarchy walk. Leave
-    # glob character classes alone (e.g. [^a] is a valid glob class).
-    outside_classes = re.sub(r"\[[^\]]*\]", "", pattern)
-    if any(token in outside_classes for token in (".*", ".+", "^", "$", "\\")):
-        suggestion = pattern.removeprefix("^").removesuffix("$")
-        suggestion = suggestion.replace(".*", "*").replace(".+", "?*")
-        suggestion = suggestion.replace(r"\.", ".")
-        page, envelope = paginate([], limit=clamp_limit(limit, default=20), cursor=cursor)
-        return {"pattern": pattern, "kind": kind, "matches": page, **envelope,
-                "hint": ("Pattern looks like a regex; find uses case-sensitive globs "
-                         f"(*, ?, [abc]). Try {suggestion!r}; no hierarchy scan was run.")}
-    top_name = top.name
-    is_path_pattern = "." in pattern
+    from .resolve import validate_path
+    validate_path(pattern)
+    def match_elements(names, pats):
+        if not pats:
+            return not names
+        if pats[0] == "**":
+            return match_elements(names, pats[1:]) or bool(names) and match_elements(names[1:], pats)
+        return bool(names) and fnmatch.fnmatchcase(names[0], pats[0]) and match_elements(names[1:], pats[1:])
 
-    def matches_name(name: str, path: str) -> bool:
-        if is_path_pattern:
-            return fnmatch.fnmatchcase(path, pattern) or fnmatch.fnmatchcase(
-                path, f"{top_name}.{pattern}")
-        return fnmatch.fnmatchcase(name, pattern)
+    def matches_name(path):
+        # Patterns may include the top level or start directly beneath it.
+        return match_elements(path, pattern) or match_elements(path[1:], pattern)
 
     def walk():
         if kind in ("module", "any"):
             for design in snl.iter_designs():
                 name = design.getName()
-                if matches_name(name, name):
+                if match_elements([name], pattern):
                     yield {"kind": "module", "name": name}
         stack = [top]
         while stack:
@@ -257,44 +248,45 @@ def find(pattern: str, kind: str = "any", limit: Optional[int] = None,
                     n = net.getName()
                     if not n:
                         continue
-                    p = f"{path}.{n}"
-                    if matches_name(n, p):
-                        yield {"kind": "net", "path": p,
+                    p = path + [n]
+                    if matches_name(p):
+                        yield {"kind": "net", "path": p, "bit": None,
                                "width": snl.obj_width(net)}
             if kind in ("port", "any"):
                 for term in node.design.getTerms():
                     n = term.getName()
-                    p = f"{path}.{n}"
-                    if matches_name(n, p):
-                        yield {"kind": "term", "path": p,
+                    if not n:
+                        continue  # unnamed primitive pins have no exact-name address
+                    p = path + [n]
+                    if matches_name(p):
+                        yield {"kind": "term", "path": p, "bit": None,
                                "dir": snl.direction_str(term.getDirection())}
             children = []
             for child in snl.child_nodes(node):
-                if kind in ("instance", "any") and matches_name(
-                        child.name, child.path):
-                    yield {"kind": "instance", "path": child.path,
+                if kind in ("instance", "any") and matches_name(child.path):
+                    yield {"kind": "instance", "path": child.path, "bit": None,
                            "model": child.model_name}
-                if not child.is_leaf():
-                    children.append(child)
+                # Primitive pins and nets are addressable too.
+                children.append(child)
             stack.extend(reversed(children))
 
     page, envelope = paginate(walk(), limit=clamp_limit(limit, default=20),
                                cursor=cursor)
     out = {"pattern": pattern, "kind": kind, "matches": page, **envelope}
     if not page and cursor is None and SESSION.intent_available:
-        hint = SESSION.intent.search_hint(pattern)
+        hint = SESSION.intent.search_hint(pattern[-1]) if pattern else None
         if hint:
             out["hint"] = hint
     return out
 
 
 @serialized
-def get_hierarchy(path: Optional[str] = None, depth: int = 1,
+def get_hierarchy(path: Optional[List[str]] = None, depth: int = 1,
                   limit: Optional[int] = None,
                   cursor: Optional[str] = None) -> dict:
     depth = max(1, min(depth, 5))
     limit = clamp_limit(limit, default=20, maximum=100)
-    if path:
+    if path is not None:
         matches = resolve_path(SESSION, path, kind="instance")
         root = matches[0]
     else:
@@ -303,7 +295,7 @@ def get_hierarchy(path: Optional[str] = None, depth: int = 1,
 
     def node(resolved: Resolved, level: int) -> dict:
         inst = resolved.obj
-        out = {"name": inst.name or resolved.path, "model": inst.model_name}
+        out = {"name": inst.name, "model": inst.model_name, "path": resolved.path, "bit": None, "kind": "instance"}
         src = source_ref(resolved, SESSION)
         if src:
             out["src"] = src
@@ -341,8 +333,8 @@ def get_hierarchy(path: Optional[str] = None, depth: int = 1,
 
 # -- connectivity ---------------------------------------------------------------
 
-def _resolve_single(path: str, kinds=("term", "net")) -> Resolved:
-    matches = resolve_path(SESSION, path)
+def _resolve_single(path: List[str], kinds=("term", "net"), bit=None) -> Resolved:
+    matches = resolve_path(SESSION, path, bit=bit)
     for kind in kinds:
         for m in matches:
             if m.kind == kind:
@@ -351,23 +343,23 @@ def _resolve_single(path: str, kinds=("term", "net")) -> Resolved:
 
 
 @serialized
-def get_drivers(path: str, limit: Optional[int] = None) -> dict:
-    resolved = _resolve_single(path)
+def get_drivers(path: List[str], limit: Optional[int] = None, bit: Optional[int] = None) -> dict:
+    resolved = _resolve_single(path, bit=bit)
     return connectivity.endpoints(resolved, SESSION, "drivers",
                                   clamp_limit(limit, default=20))
 
 
 @serialized
-def get_loads(path: str, limit: Optional[int] = None) -> dict:
-    resolved = _resolve_single(path)
+def get_loads(path: List[str], limit: Optional[int] = None, bit: Optional[int] = None) -> dict:
+    resolved = _resolve_single(path, bit=bit)
     return connectivity.endpoints(resolved, SESSION, "loads",
                                   clamp_limit(limit, default=20))
 
 
 @serialized
-def trace_cone(path: str, direction: str,
-               max_frontier: int = cone_mod.DEFAULT_MAX_FRONTIER) -> dict:
-    resolved = _resolve_single(path)
+def trace_cone(path: List[str], direction: str,
+               max_frontier: int = cone_mod.DEFAULT_MAX_FRONTIER, bit: Optional[int] = None) -> dict:
+    resolved = _resolve_single(path, bit=bit)
     return cone_mod.trace_cone(resolved, SESSION, direction,
                                max_frontier=max_frontier)
 
@@ -375,24 +367,26 @@ def trace_cone(path: str, direction: str,
 # -- source -----------------------------------------------------------------------
 
 @serialized
-def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT,
-               origin: Optional[int] = None) -> dict:
+def get_source(path: List[str], context_lines: int = DEFAULT_SOURCE_CONTEXT,
+               origin: Optional[int] = None, bit: Optional[int] = None) -> dict:
     context_lines = max(0, min(context_lines, 20))
-    matches = resolve_path(SESSION, path)
+    matches = resolve_path(SESSION, path, bit=bit)
     resolved = matches[0]
     rng = source_range(resolved)
     origins = source_origins(resolved)[:MAX_ORIGINS]
     extra = {"origins": [r.to_ref() for r in origins]} if origins else {}
     if origin is not None:
         if not 0 <= origin < len(origins):
-            return {"object": resolved.path, **extra,
+            return {"object": resolved.path, "path": resolved.path,
+                    "kind": resolved.kind, "bit": resolved.bit, **extra,
                     "error": f"No source origin #{origin} for this object "
                              f"({len(origins)} known)."}
         rng = origins[origin]
         extra["origin"] = origin
     if rng is None:
         return {
-            "object": resolved.path,
+            "object": resolved.path, "path": resolved.path,
+            "kind": resolved.kind, "bit": resolved.bit,
             "error": "No source range known for this object.",
             "hint": ("Source ranges come from SystemVerilog, VHDL and "
                      "Verilog netlist loading; synthesized anonymous "
@@ -400,7 +394,8 @@ def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT,
         }
     file_path = SESSION.find_source_file(rng.file)
     if file_path is None:
-        return {"object": resolved.path, "src": rng.to_ref(), **extra,
+        return {"object": resolved.path, "path": resolved.path,
+                "kind": resolved.kind, "bit": resolved.bit, "src": rng.to_ref(), **extra,
                 "error": f"Source file not found: {rng.file}"}
     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
@@ -433,7 +428,8 @@ def get_source(path: str, context_lines: int = DEFAULT_SOURCE_CONTEXT,
         selected = head + [f"... ({omitted} lines omitted) ...\n"] + tail
         truncated = True
     return {
-        "object": resolved.path,
+        "object": resolved.path, "path": resolved.path,
+        "kind": resolved.kind, "bit": resolved.bit,
         "file": file_path,
         "start": start,
         "end": end,
@@ -527,11 +523,11 @@ def _collect_model_stats(design, memo: dict, sequential_models: dict) -> dict:
 
 
 @serialized
-def get_stats(path: Optional[str] = None, limit: Optional[int] = None,
+def get_stats(path: Optional[List[str]] = None, limit: Optional[int] = None,
               cursor: Optional[str] = None) -> dict:
     """Summary totals; pass limit or cursor to include per-model details."""
     summary_only = limit is None and cursor is None
-    if path:
+    if path is not None:
         matches = resolve_path(SESSION, path, kind="instance")
         design = matches[0].obj.design
     else:
@@ -563,13 +559,20 @@ def get_stats(path: Optional[str] = None, limit: Optional[int] = None,
 # -- intent layer -----------------------------------------------------------
 
 @serialized
-def get_intent(ref: str, want: str = "auto") -> dict:
+def get_intent(ref: List[str], want: str = "auto", bit: Optional[int] = None) -> dict:
     """Query the living-intent layer for source-level facts erased by lowering.
 
     Warm-only (the slang Compilation never serializes): if the intent layer is not
     loaded, this degrades gracefully — the structural source range is still
     available via get_source.
     """
+    from .resolve import validate_path
+    validate_path(ref)
+    if not ref:
+        ref = SESSION.require_top().path
+    if bit is not None:
+        # Type and parameter intent describes the declaration; validate the selected bit first.
+        resolve_path(SESSION, ref, bit=bit)
     if not SESSION.intent_available:
         return {"intent_loaded": False,
                 "note": ("intent layer not loaded; source range is available "
@@ -577,16 +580,24 @@ def get_intent(ref: str, want: str = "auto") -> dict:
                          "AST link (load_systemverilog/load_vhdl intent=True, "
                          "NAJA_SCOPE_INTENT=1, or load_intent).")}
     ip = SESSION.intent
+
+    def result(record):
+        try:
+            resolved = resolve_path(SESSION, ref, bit=bit)[0]
+        except ScopeError:
+            return record  # package, module name or parameter declaration
+        return {**record, "path": resolved.path, "bit": resolved.bit, "kind": resolved.kind}
+
     try:
         if want == "auto":
-            return ip.describe(ref)
+            return result(ip.describe(ref))
         if want == "type":
-            return {"intent": "type", **ip.get_type(ref)}
+            return result({"intent": "type", **ip.get_type(ref)})
         if want in ("fsm_states", "enum"):
-            return {"intent": "fsm_states", **ip.get_fsm_states(ref)}
+            return result({"intent": "fsm_states", **ip.get_fsm_states(ref)})
         if want == "parameters":
             rec = ip.get_parameters(ref)
-            return {"intent": "parameter" if "name" in rec else "parameters", **rec}
+            return result({"intent": "parameter" if "name" in rec else "parameters", **rec})
         raise ScopeError(
             f"unknown want={want!r}; use auto|type|fsm_states|parameters")
     except ScopeError as e:
@@ -644,21 +655,21 @@ def _cap(text: str) -> str:
 
 # Imported lazily so a normal installation needs no viewer dependencies.
 @serialized
-def open_schematic(path: Optional[str] = None, view_options: Optional[dict] = None) -> dict:
+def open_schematic(path: Optional[List[str]] = None, view_options: Optional[dict] = None) -> dict:
     from .schematic import open_schematic as open_view
     return open_view(path, view_options)
 
 
 @serialized
-def show_schematic_net(path: str, trace: bool = False, add: bool = True,
-                       color: Optional[str] = None) -> dict:
+def show_schematic_net(path: List[str], trace: bool = False, add: bool = True,
+                       color: Optional[str] = None, bit: Optional[int] = None) -> dict:
     from .schematic import show_schematic_net as show_net
-    return show_net(path, trace, add, color)
+    return show_net(path, trace, add, color, bit=bit)
 
 
 @serialized
-def export_schematic(file: str, instances: Optional[List[str]] = None,
-                     nets: Optional[List[str]] = None, traces: Optional[List[str]] = None,
+def export_schematic(file: str, instances: Optional[List[List[str]]] = None,
+                     nets: Optional[List[dict]] = None, traces: Optional[List[dict]] = None,
                      view_options: Optional[dict] = None, scale: float = 1.0) -> dict:
     from .schematic import export_schematic as export
     return export(file, instances, nets, traces, view_options, scale)

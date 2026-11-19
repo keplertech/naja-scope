@@ -42,7 +42,7 @@ PROMPT="Use the naja-scope MCP tools ONLY (no file reading). \
 first load takes under a minute). \
 2) Call get_hierarchy and list the real submodules (ignore assign glue). \
 3) Call get_drivers on cva6.ex_stage_i.i_mult.i_div.state_q and report the driver. \
-4) Call trace_cone(path='cva6.ex_stage_i.i_mult.i_div.state_d', direction='fanin') \
+4) Call trace_cone(path=['cva6','ex_stage_i','i_mult','i_div','state_d'], direction='fanin') \
 and report whether the frontier reaches registers outside the EX stage, naming \
 one such register or module. \
 End with a single line 'ANSWER: ...'."

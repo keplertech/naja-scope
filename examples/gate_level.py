@@ -47,11 +47,11 @@ def main():
     print(f"  cells : {card['counts']['by_model']}")
 
     banner('Q: "What drives output q1?"')
-    leaf = api.get_drivers("counter2.q1")["leaf_drivers"][0]
+    leaf = api.get_drivers(['counter2', 'q1'])["leaf_drivers"][0]
     print(f"  cell  : {leaf['path']}  model={leaf['model']}  pin={leaf['pin']}")
 
     banner('Q: "What feeds the q1 flop\'s D input (fan-in cone)?"')
-    cone = api.trace_cone("counter2.u_ff1.D", "fanin")
+    cone = api.trace_cone(['counter2', 'u_ff1', 'D'], "fanin")
     fr = cone["frontier"]
     print(f"  nodes in cone     : {cone['node_count']}")
     print(f"  by kind           : {cone['counts_by_kind']}")

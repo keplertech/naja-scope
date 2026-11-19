@@ -19,7 +19,7 @@ def net_types_session():
 
 
 def test_runtime_version_matches_release():
-    assert __version__ == "0.1.26"
+    assert __version__ == "0.2.0"
 
 
 @pytest.mark.parametrize(
@@ -32,13 +32,13 @@ def test_runtime_version_matches_release():
     ],
 )
 def test_scalar_literal_driver_value(net_types_session, signal, value):
-    drivers = api.get_drivers(f"net_types.{signal}")["leaf_drivers"]
+    drivers = api.get_drivers(['net_types', signal])["leaf_drivers"]
     assert len(drivers) == 1
     assert drivers[0]["model"] == "assign"
     assert drivers[0]["constant"] == value
 
 
 def test_mixed_four_state_bus_driver_values(net_types_session):
-    drivers = api.get_drivers("net_types.mixed_o")["leaf_drivers"]
-    by_bit = {driver["bit"]: driver["constant"] for driver in drivers}
+    drivers = api.get_drivers(['net_types', 'mixed_o'])["leaf_drivers"]
+    by_bit = {driver["queried_bit"]: driver["constant"] for driver in drivers}
     assert by_bit == {3: "X", 2: "Z", 1: "0", 0: "1"}
