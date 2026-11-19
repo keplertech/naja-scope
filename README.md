@@ -14,9 +14,10 @@
 
 naja-scope is an [MCP](https://modelcontextprotocol.io) server that gives AI
 agents (Claude, and any MCP-compatible assistant) a precise, structured view of
-your elaborated SystemVerilog or VHDL design. Instead of dumping thousands of lines of
-RTL into the model's context, the agent asks targeted questions — *what drives
-this signal? what's inside this module? where does this net come from?* — and
+your elaborated SystemVerilog or VHDL design. Instead of dumping thousands of
+lines of RTL into the model's context, the agent asks targeted questions —
+*what drives this signal? what's inside this module? where does this net come
+from?* — and
 gets back small, exact answers with file-and-line references.
 
 Built on the [najaeda](https://github.com/najaeda/naja) netlist engine.
@@ -250,8 +251,9 @@ VHDL loading is available in beta. Call
 `load_vhdl(file=["pkg.vhd", "child.vhd", "top.vhd"], top="my_entity")` to
 explore its elaborated hierarchy and connectivity; the files may be listed in
 any order. A single path per call also works (load packages first);
-package-only files may return `top: null` until the top file is loaded. The frontend supports a restricted two-state RTL subset,
-and supported constructs may change. `get_source` reads VHDL entity, port,
+package-only files may return `top: null` until the top file is loaded. The
+frontend supports a restricted two-state RTL subset, and supported constructs
+may change. `get_source` reads VHDL entity, port,
 signal, instance and process origins, including after snapshot reloads.
 
 Designs that name their library, as in `library neorv32;`, need
@@ -259,7 +261,7 @@ Designs that name their library, as in `library neorv32;`, need
 
 Pass `intent=True` to `load_vhdl`, or call `load_intent` afterwards, to query
 `get_intent` for enum literals and their encodings, including FSM states held
-in record fields, record fields, generics, and symbolic ranges such as
+in record fields, generics, and symbolic ranges such as
 `WIDTH-1 downto 0`. Package members use `pkg::NAME`, and an instance's parameter
 list leaves them out. Query the signal rather than its inferred flop, and note
 that record fields report widths, not bit positions. Validated on the
@@ -288,7 +290,8 @@ object. See [the path contract](docs/paths.md) for migration details.
 `find` uses lists of case-sensitive globs: use `["**", "*state*"]` to
 search at any depth. Each element matches one name; `"**"` matches zero or
 more hierarchy levels. Dots, slashes and dollar signs have no separator or
-regex meaning. When a search misses a known parameter, a warm intent session points to `get_intent`.
+regex meaning. When a search misses a known parameter, a warm intent session
+points to `get_intent`.
 Use `get_intent(["top", "inst", "PARAM"])` for one parameter, `get_intent(["pkg::NAME"])`
 for a package member, or `get_intent(["pkg"], want="parameters")` to list package
 parameters. SystemVerilog package listing discovers names from available
@@ -315,6 +318,58 @@ production RISC-V core, cloned on demand — see
 [`examples/cva6_demo.sh`](examples/cva6_demo.sh)) and
 [CORE-V-MCU](https://github.com/openhwgroup/core-v-mcu) (a full multi-vendor
 RISC-V SoC — see [`examples/core_v_mcu_demo.sh`](examples/core_v_mcu_demo.sh)).
+
+---
+
+## Optional browser schematic
+
+Requires **naja-schematic 0.3.x**:
+
+```bash
+pip install "naja-scope[schematic]"
+```
+
+Restart the MCP server after installation. Load a design as usual, then use:
+
+- `open_schematic(path=["top", "u_cpu"])`: returns a local browser URL and focuses
+  the instance. Omit `path` for the top. Anonymous `#id` instances are supported.
+- `annotate_schematic(items=[{"path": ["top", "u_cpu"], "message": "Check reset",
+  "severity": "warning"}])`: replaces the overlay. Use `kind="term"` with a
+  pin/port path to annotate that terminal; annotations apply to the whole port,
+  not individual bus bits. Pass `items=[]` to clear. At most 200 annotations,
+  each with at most 2000 message characters.
+- `get_schematic_selection()`: returns the last clicked instance as a regular
+  naja-scope path, usable with source and hierarchy queries. For a module card,
+  pass the selection's `model` to `get_module_card`.
+- `show_schematic_net(path=["top", "u_cpu", "D"], bit=3, trace=True)`: draws the pin's
+  combinational fan-in cone back to flops, ports and blackboxes. With
+  `trace=False` (the default), draws just its net. Use `add=False` to clear the
+  drawing first, and `color="#ff8800"` to choose a trace color. Targets are
+  pin/port paths, with one bit selected for a bus; anonymous `#id` paths work.
+- `export_schematic(file="cone.svg", traces=[{"path": ["top", "u_cpu", "D"], "bit": 3}])`: renders
+  directly from the loaded design, without starting a browser. Use `.png`
+  for PNG (`scale=2` for twice the resolution). Combine `instances`, `nets`
+  and `traces` lists, up to 200 total targets. Instances draw boxes; nets and
+  traces take `{ "path": ["top", "u_cpu", "D"], "bit": 3 }` records.
+  Instances take lists such as `[["top", "u_cpu"]]`. The top has no box:
+  use its ports instead.
+  Returns the local file path, format and byte size; overwrites an existing
+  file. The renderer is included in supported platform wheels.
+
+`open_schematic` and `export_schematic` accept `view_options`, for example
+`{"instance_label": "both", "max_sinks": 16, "group_by": "role"}`.
+Labels can show `name`, `model` or `both`; excess sinks can be grouped by
+`model`, `hierarchy`, `role` or `pin`. Set `max_sinks=0` to draw every sink.
+Exports also accept `title`, `caption`, `legend` and `hide_ui_glyphs` inside
+`view_options`. Each export is a fresh drawing from its explicit targets and
+options; browser annotations and traces are independent.
+
+The viewer shares the existing raw naja universe; it does not elaborate again.
+The server binds to loopback and returns a token-bearing URL. Open that URL on
+**the machine running the MCP server**; it is not a remote or embedded MCP UI.
+Treat the URL as access to the loaded design. Design loads/resets refresh open
+viewers and clear selection, focus and annotations. The browser server stops
+with naja-scope. Existing tools remain usable without the schematic extra.
 
 ---
 
@@ -375,53 +430,3 @@ does not currently provide an Intel macOS wheel.
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
-</content>
-</invoke>
-
-## Optional browser schematic
-
-Requires **naja-schematic 0.3.x**:
-
-```bash
-pip install "naja-scope[schematic]"
-```
-
-Restart the MCP server after installation. Load a design as usual, then use:
-
-- `open_schematic(path=["top", "u_cpu"])`: returns a local browser URL and focuses
-  the instance. Omit `path` for the top. Anonymous `#id` instances are supported.
-- `annotate_schematic(items=[{"path": ["top", "u_cpu"], "message": "Check reset",
-  "severity": "warning"}])`: replaces the overlay. Use `kind="term"` with a
-  pin/port path to annotate that terminal; annotations apply to the whole port,
-  not individual bus bits. Pass `items=[]` to clear. At most 200 annotations,
-  each with at most 2000 message characters.
-- `get_schematic_selection()`: returns the last clicked instance as a regular
-  naja-scope path, usable with source, hierarchy and module-card queries.
-- `show_schematic_net(path=["top", "u_cpu", "D"], bit=3, trace=True)`: draws the pin's
-  combinational fan-in cone back to flops, ports and blackboxes. With
-  `trace=False` (the default), draws just its net. Use `add=False` to clear the
-  drawing first, and `color="#ff8800"` to choose a trace color. Targets are
-  pin/port paths, with one bit selected for a bus; anonymous `#id` paths work.
-- `export_schematic(file="cone.svg", traces=[{"path": ["top", "u_cpu", "D"], "bit": 3}])`: renders
-  directly from the loaded design, without starting a browser. Use `.png`
-  for PNG (`scale=2` for twice the resolution). Combine `instances`, `nets`
-  and `traces` lists, up to 200 total targets. Instances draw boxes; nets and
-  traces take `{ "path": ["top", "u_cpu", "D"], "bit": 3 }` records.
-  Instances take lists such as `[["top", "u_cpu"]]`. The top has no box: use its ports instead.
-  Returns the local file path, format and byte size; overwrites an existing
-  file. The renderer is included in supported platform wheels.
-
-`open_schematic` and `export_schematic` accept `view_options`, for example
-`{"instance_label": "both", "max_sinks": 16, "group_by": "role"}`.
-Labels can show `name`, `model` or `both`; excess sinks can be grouped by
-`model`, `hierarchy`, `role` or `pin`. Set `max_sinks=0` to draw every sink.
-Exports also accept `title`, `caption`, `legend` and `hide_ui_glyphs` inside
-`view_options`. Each export is a fresh drawing from its explicit targets and
-options; browser annotations and traces are independent.
-
-The viewer shares the existing raw naja universe; it does not elaborate again.
-The server binds to loopback and returns a token-bearing URL. Open that URL on
-**the machine running the MCP server**; it is not a remote or embedded MCP UI.
-Treat the URL as access to the loaded design. Design loads/resets refresh open
-viewers and clear selection, focus and annotations. The browser server stops
-with naja-scope. Existing tools remain usable without the schematic extra.
