@@ -83,7 +83,7 @@ def test_blackbox_multi_writer_memories(tmp_path):
     res = api.load_systemverilog(files=[source],
                                  blackbox_multi_writer_memories=True)
     assert res["top"]["name"] == "top"
-    ram = api.resolve("top.ram")["matches"][0]
+    ram = api.resolve(['top', 'ram'])["matches"][0]
     assert ram["model"] == "dp_ram"
     assert ram["is_leaf"] is True
     assert SESSION.load_spec["blackbox_multi_writer_memories"] is True
@@ -131,7 +131,7 @@ def test_default_timescale_without_top_with_flist(tmp_path):
     try:
         result = api.load_systemverilog(flist=str(flist), default_timescale="1ns/1ps")
         assert result["top"]["model"] == "top"
-        assert api.resolve("top.u")["matches"][0]["model"] == "child"
+        assert api.resolve(['top', 'u'])["matches"][0]["model"] == "child"
     finally:
         SESSION.reset()
 

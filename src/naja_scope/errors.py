@@ -33,12 +33,15 @@ class NoDesignError(ScopeError):
 class ResolveError(ScopeError):
     """Path resolution failure with did-you-mean candidates."""
 
-    def __init__(self, path: str, failed_segment: str,
-                 suggestions: Optional[List[str]] = None):
-        msg = f"Cannot resolve '{path}': no match for segment '{failed_segment}'."
+    def __init__(self, path, index, parent, suggestions=None):
+        value = path[index]
+        msg = f"element {index} {value!r} not found under {parent!r}"
+        if suggestions:
+            msg += "; did you mean " + ", ".join(repr(s) for s in suggestions) + "?"
         super().__init__(msg, suggestions)
         self.path = path
-        self.failed_segment = failed_segment
+        self.failed_segment = value
+        self.index = index
 
 
 # -- SystemVerilog load failures ----------------------------------------------

@@ -38,7 +38,7 @@ def ip():
 # -- enum / FSM-state recovery (the package-typedef-enum gate) ---------------
 
 def test_fsm_states_package_typedef_enum(ip):
-    rec = ip.get_fsm_states("intent_mini.state_q")
+    rec = ip.get_fsm_states(['intent_mini', 'state_q'])
     assert rec["type"] == "mini_pkg::state_e"
     assert rec["enum"]["width"] == 2
     members = {m["name"]: m["encoding"] for m in rec["enum"]["members"]}
@@ -49,14 +49,14 @@ def test_fsm_states_package_typedef_enum(ip):
 
 
 def test_get_type_resolves_alias(ip):
-    rec = ip.get_type("intent_mini.state_q")
+    rec = ip.get_type(['intent_mini', 'state_q'])
     assert rec["type"] == "mini_pkg::state_e"
     assert rec["canonical_kind"] == "enum"
 
 
 def test_get_fsm_states_non_enum_notes(ip):
     # clk is a plain logic net, not enum-typed: no FSM states, but no crash.
-    rec = ip.get_fsm_states("intent_mini.clk")
+    rec = ip.get_fsm_states(['intent_mini', 'clk'])
     assert "enum" not in rec
     assert "note" in rec
 
@@ -65,7 +65,7 @@ def test_get_fsm_states_non_enum_notes(ip):
 
 def test_non_enum_scalar_type(ip):
     # A plain logic value returns its declared type (was None pre-extension).
-    rec = ip.get_type("intent_mini.clk")
+    rec = ip.get_type(['intent_mini', 'clk'])
     assert rec["type"] == "logic"
     assert rec["canonical_kind"] == "scalar"
     assert "enum" not in rec and "struct" not in rec
@@ -74,7 +74,7 @@ def test_non_enum_scalar_type(ip):
 def test_packed_struct_fields(ip):
     # A packed-struct register exposes its field names + bit ranges (the struct
     # analog of enum members — lost in lowering, recovered via the AST link).
-    rec = ip.get_type("intent_mini.req_q")
+    rec = ip.get_type(['intent_mini', 'req_q'])
     assert rec["canonical_kind"] == "packed_struct"
     fields = {f["name"]: f for f in rec["struct"]["fields"]}
     assert set(fields) == {"valid", "id"}
@@ -92,7 +92,7 @@ def test_anonymous_id_resolves_to_source_enum(ip):
     top = SESSION.require_top()
     ff = next(i for i in top.design.getInstances()
               if i.getModel().getName().startswith("naja_dffrn"))
-    rec = ip.get_type(f"intent_mini.#{ff.getID()}")
+    rec = ip.get_type(['intent_mini', f'#{ff.getID()}'])
     assert rec["type"] == "mini_pkg::state_e"
     assert rec["enum"]["width"] == 2
 
@@ -100,7 +100,7 @@ def test_anonymous_id_resolves_to_source_enum(ip):
 # -- symbolic parameter expressions ------------------------------------------
 
 def test_symbolic_param_ternary_package(ip):
-    rec = ip.describe("mini_pkg::PLEN")
+    rec = ip.describe(['mini_pkg::PLEN'])
     assert rec["intent"] == "parameter"
     assert rec["value"] == "34"
     assert rec["expr"] == "(32 == 32) ? 34 : 56"  # formula kept, not just 34
@@ -109,14 +109,14 @@ def test_symbolic_param_ternary_package(ip):
 def test_symbolic_param_clog2_localparam(ip):
     # IDX_W is a module localparam — no SNL object of its own, reached via the
     # module's parameter list (not a standalone ref).
-    rec = ip.get_parameters("intent_mini")
+    rec = ip.get_parameters(['intent_mini'])
     idx = next(p for p in rec["parameters"] if p["name"] == "IDX_W")
     assert idx["expr"] == "$clog2(DEPTH)"
     assert idx["value"] == "2"
 
 
 def test_get_parameters_includes_localparams(ip):
-    rec = ip.get_parameters("intent_mini")
+    rec = ip.get_parameters(['intent_mini'])
     by_name = {p["name"]: p for p in rec["parameters"]}
     assert "DEPTH" in by_name and "IDX_W" in by_name
     assert by_name["IDX_W"]["localparam"] is True
@@ -141,13 +141,13 @@ def test_decimal_value_normalization():
 # -- error / robustness paths ------------------------------------------------
 
 def test_unknown_name_rejected(ip):
-    with pytest.raises(ScopeError, match="resolve"):
-        ip.get_type("intent_mini.does_not_exist")
+    with pytest.raises(ScopeError, match="element"):
+        ip.get_type(['intent_mini', 'does_not_exist'])
 
 
 def test_unknown_package_rejected(ip):
     with pytest.raises(ScopeError, match="package"):
-        ip.get_type("no_such_pkg::FOO")
+        ip.get_type(['no_such_pkg::FOO'])
 
 
 # -- api dispatch + graceful degradation -------------------------------------
@@ -155,17 +155,17 @@ def test_unknown_package_rejected(ip):
 def test_api_get_intent_degrades_when_unloaded(monkeypatch):
     from naja_scope import session as sess
     monkeypatch.setattr(sess.naja, "intentAvailable", lambda: False)
-    out = api.get_intent("anything")
+    out = api.get_intent(['anything'])
     assert out["intent_loaded"] is False
     assert "get_source" in out["note"]
 
 
 def test_api_get_intent_dispatch(ip):
-    out = api.get_intent("intent_mini.state_q", want="fsm_states")
+    out = api.get_intent(['intent_mini', 'state_q'], want="fsm_states")
     assert out["intent"] == "fsm_states"
     assert out["type"] == "mini_pkg::state_e"
     # bad want -> structured error, not exception
-    err = api.get_intent("intent_mini.state_q", want="bogus")
+    err = api.get_intent(['intent_mini', 'state_q'], want="bogus")
     assert "error" in err
 
 

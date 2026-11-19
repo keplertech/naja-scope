@@ -81,7 +81,7 @@ def test_optional_dependency_error(design, monkeypatch):
 
 def test_focus_selection_annotations_and_reset(viewer):
     _, anonymous, another = viewer
-    path = f"top.#{anonymous}"
+    path = ["top", f"#{anonymous}"]
     opened = api.open_schematic(path)
     assert opened["path"] == path
     with urlopen(opened["url"], timeout=3) as page:
@@ -97,9 +97,9 @@ def test_focus_selection_annotations_and_reset(viewer):
         # A following request forms a barrier after the selection notification.
         ws.send(json.dumps({"request": "load_root"}))
         receive(ws, "root_response")
-        assert api.get_schematic_selection()["selection"]["path"] == f"top.#{another}"
+        assert api.get_schematic_selection()["selection"]["path"] == ["top", f"#{another}"]
         api.annotate_schematic([{"path": path, "message": "check this", "severity": "warning"},
-                               {"path": path + ".A", "kind": "term", "message": "input"}])
+                               {"path": path + ["A"], "kind": "term", "message": "input"}])
         diagnosis = receive(ws, "diagnosis_response")
         assert diagnosis["items"][0]["id_path"] == [anonymous]
         assert diagnosis["items"][1]["terminal"] == "A"
@@ -111,7 +111,7 @@ def test_focus_selection_annotations_and_reset(viewer):
 
 
 def test_snapshot_reload_and_shutdown(viewer, tmp_path):
-    opened = api.open_schematic("top.named")
+    opened = api.open_schematic(['top', 'named'])
     snapshot = str(tmp_path / "snapshot")
     api.save_snapshot(snapshot)
     with connect(opened["url"]) as ws:
@@ -123,7 +123,7 @@ def test_snapshot_reload_and_shutdown(viewer, tmp_path):
         receive(ws, "design_changed")
         ws.send(json.dumps({"request": "load_root"}))
         assert receive(ws, "root_response")["root"]["name"] == "top"
-        assert api.open_schematic("top.named")["url"] == opened["url"]
+        assert api.open_schematic(['top', 'named'])["url"] == opened["url"]
         assert receive(ws, "focus_instance")["id_path"] == [viewer[0]]
     server = schematic._viewer
     schematic.close()
@@ -131,8 +131,8 @@ def test_snapshot_reload_and_shutdown(viewer, tmp_path):
 
 
 def test_validation_does_not_start_viewer(design):
-    for items in ([{"path": "top.missing"}], [{"path": "top.named", "severity": "bad"}],
-                  [{"path": "top.named", "message": "a" * 2001}], [{}] * 201):
+    for items in ([{"path": ['top', 'missing']}], [{"path": ['top', 'named'], "severity": "bad"}],
+                  [{"path": ['top', 'named'], "message": "a" * 2001}], [{}] * 201):
         with pytest.raises(ScopeError):
             api.annotate_schematic(items)
     assert schematic._viewer is None
@@ -194,7 +194,7 @@ def test_old_generation_cannot_restore_selection_after_reload(viewer, tmp_path):
         ws.send(json.dumps({**stale, "generation": generation}))
         ws.send(json.dumps({"request": "load_root", "generation": generation}))
         receive(ws, "root_response")
-        assert api.get_schematic_selection()["selection"]["path"] == "top.named"
+        assert api.get_schematic_selection()["selection"]["path"] == ['top', 'named']
 
 
 def test_net_trace_and_view_options_protocol(viewer):
@@ -204,19 +204,19 @@ def test_net_trace_and_view_options_protocol(viewer):
         ws.send(json.dumps({"request": "load_root"}))
         receive(ws, "root_response")
         assert receive(ws, "view_options").items() >= options.items()
-        path = f"top.#{viewer[1]}.A"
+        path = ["top", f"#{viewer[1]}", "A"]
         result = api.show_schematic_net(path, color="#ff8800", add=False)
         assert result["url"] == opened["url"]
         message = receive(ws, "show_net")
         assert message["id_path"] == [viewer[1]]
         assert message["color"] == "#ff8800"
         assert message["add"] is False
-        api.show_schematic_net("top.data[2]", trace=True)
+        api.show_schematic_net(['top', 'data'], trace=True, bit=2)
         message = receive(ws, "show_net")
         assert message["id_path"] == []
         assert message["bit"] == 2
         assert message["trace"] is True
-        api.show_schematic_net("top.single")
+        api.show_schematic_net(['top', 'single'])
         assert receive(ws, "show_net")["bit"] == 7
     # Traces and drawing options are replayed to a newly connected viewer.
     with connect(opened["url"]) as ws:
@@ -234,8 +234,8 @@ def test_headless_exports(viewer, tmp_path):
     import xml.etree.ElementTree as ET
 
     svg = tmp_path / "cone.svg"
-    result = api.export_schematic(str(svg), instances=[f"top.#{viewer[1]}"],
-                                  nets=["top.data[2]"], traces=[f"top.#{viewer[1]}.A"],
+    result = api.export_schematic(str(svg), instances=[["top", f"#{viewer[1]}"]],
+                                  nets=[{"path": ["top", "data"], "bit": 2}], traces=[{"path": ["top", f"#{viewer[1]}", "A"]}],
                                   view_options={"title": "Input cone", "legend": True,
                                                 "instance_label": "both", "hide_ui_glyphs": True})
     assert result == {"file": str(svg), "format": "svg", "bytes": svg.stat().st_size}
@@ -245,7 +245,7 @@ def test_headless_exports(viewer, tmp_path):
     assert any(e.get("data-id-path") == str(viewer[1]) for e in root.iter())
     assert any(e.get("class") == "net" for e in root.iter())
     png = tmp_path / "cone.png"
-    api.export_schematic(str(png), nets=["top.data[2]"], scale=2)
+    api.export_schematic(str(png), nets=[{"path": ["top", "data"], "bit": 2}], scale=2)
     data = png.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
     assert all(n > 0 for n in struct.unpack(">II", data[16:24]))
@@ -253,23 +253,23 @@ def test_headless_exports(viewer, tmp_path):
 
 
 def test_new_tool_validation(viewer, tmp_path):
-    for kwargs in ({"path": "top.data"}, {"path": "top.data[2]", "color": "bad"},
-                   {"path": "top.data[2]", "trace": "yes"}):
+    for kwargs in ({"path": ['top', 'data']}, {"path": ["top", "data"], "bit": 2, "color": "bad"},
+                   {"path": ["top", "data"], "bit": 2, "trace": "yes"}):
         with pytest.raises(ScopeError):
             api.show_schematic_net(**kwargs)
     for options in ({"max_sinks": -1}, {"unknown": True}, []):
         with pytest.raises(ScopeError):
             api.open_schematic(view_options=options)
     svg = tmp_path / "bad.svg"
-    for kwargs in ({}, {"instances": ["top"]}, {"nets": ["top.data"]},
-                   {"instances": ["top.named"] * 201}, {"instances": "top.named"},
-                   {"nets": ["top.data[2]"], "view_options": {"group_by": "invalid"}}):
+    for kwargs in ({}, {"instances": ["top"]}, {"nets": [['top', 'data']]},
+                   {"instances": [['top', 'named']] * 201}, {"instances": ['top', 'named']},
+                   {"nets": [{"path": ["top", "data"], "bit": 2}], "view_options": {"group_by": "invalid"}}):
         with pytest.raises(ScopeError):
             api.export_schematic(str(svg), **kwargs)
     with pytest.raises(ScopeError, match="scale"):
-        api.export_schematic(str(tmp_path / "bad.png"), nets=["top.data[2]"], scale=0)
+        api.export_schematic(str(tmp_path / "bad.png"), nets=[{"path": ["top", "data"], "bit": 2}], scale=0)
     with pytest.raises(ScopeError, match="Cannot export"):
-        api.export_schematic(str(tmp_path / "missing" / "bad.svg"), nets=["top.data[2]"])
+        api.export_schematic(str(tmp_path / "missing" / "bad.svg"), nets=[{"path": ["top", "data"], "bit": 2}])
     assert not svg.exists()
     assert schematic._viewer is None
 
@@ -280,7 +280,7 @@ def test_export_elaborated_hierarchical_cone(uart_session, tmp_path):
     if not hasattr(package, "export_png"):
         pytest.skip("requires naja-schematic>=0.3.0")
     file = tmp_path / "busy.svg"
-    api.export_schematic(str(file), traces=["uart_top.u_tx.tx_busy"],
+    api.export_schematic(str(file), traces=[{"path": ["uart_top", "u_tx", "tx_busy"]}],
                          view_options={"instance_label": "both"})
     root = ET.parse(file).getroot()
     boxes = [e for e in root.iter() if e.get("class") == "instance"]

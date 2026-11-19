@@ -37,11 +37,11 @@ def test_anonymous_instances_get_id_segments(uart_session):
 def test_friendly_label_is_readable(uart_session):
     """The registered tx_o flop gets a readable, driven-net-based label even
     though it carries no SV name."""
-    drivers = api.get_drivers("uart_top.tx_o")
+    drivers = api.get_drivers(['uart_top', 'tx_o'])
     leaf = drivers["leaf_drivers"]
     assert leaf, drivers
     entry = leaf[0]
-    assert entry["path"].startswith("uart_top.")
+    assert entry["path"][0] == "uart_top"
     assert "tx_o" in entry["label"], entry
 
 
@@ -61,7 +61,7 @@ def test_module_card_src_points_at_fixture(uart_session):
 
 
 def test_get_source_of_ff_contains_always_ff(uart_session):
-    drivers = api.get_drivers("uart_top.tx_o")
+    drivers = api.get_drivers(['uart_top', 'tx_o'])
     leaf = drivers["leaf_drivers"]
     assert leaf, drivers
     ff_path = leaf[0]["path"]
@@ -72,5 +72,5 @@ def test_get_source_of_ff_contains_always_ff(uart_session):
 
 def test_get_source_unknown_range_degrades(uart_session):
     # The top module itself has a range; a term resolves through its owner.
-    result = api.get_source("uart_top.tx_o")
+    result = api.get_source(['uart_top', 'tx_o'])
     assert "error" in result or "text" in result

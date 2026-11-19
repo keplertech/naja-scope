@@ -36,11 +36,11 @@ def main():
           f"ports={top['terms']}")
 
     banner('Q: "What\'s the top-level hierarchy?"')
-    h = api.get_hierarchy("uart_top", depth=1)
+    h = api.get_hierarchy(['uart_top'], depth=1)
     print(_fmt_hierarchy(h["root"]))
 
     banner('Q: "What drives the registered output tx_o?"')
-    drv = api.get_drivers("uart_top.tx_o")
+    drv = api.get_drivers(['uart_top', 'tx_o'])
     leaf = drv["leaf_drivers"][0]
     print(f"  driver model : {leaf['model']}  (sequential={leaf['is_sequential']})")
     print(f"  output pin   : {leaf['pin']}")
@@ -53,7 +53,7 @@ def main():
         print(f"    {line}")
 
     banner('Q: "What feeds the FSM next-state logic (fan-in cone)?"')
-    cone = api.trace_cone("uart_top.u_tx.state_n", "fanin")
+    cone = api.trace_cone(['uart_top', 'u_tx', 'state_n'], "fanin")
     print(f"  nodes in cone     : {cone['node_count']}")
     print(f"  by kind           : {cone['counts_by_kind']}")
     print(f"  register frontier : {cone['frontier']['flop_count']} flop(s)")

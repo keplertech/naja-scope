@@ -88,22 +88,22 @@ end architecture;
     with pytest.warns(RuntimeWarning, match="Beta"):
         result = api.load_vhdl([str(top), str(child)])
     assert result["top"]["model"] == "top"
-    assert api.resolve("top.u")["matches"][0]["model"] == "child"
+    assert api.resolve(['top', 'u'])["matches"][0]["model"] == "child"
     assert api.status()["loaded_files"] == [str(top), str(child)]
     # Coordinates refer to each original input file, not a concatenated batch.
-    sources = {path: api.get_source(path, context_lines=0) for path in
-               ("top", "top.a", "top.u", "top.u.a")}
-    assert "entity top is" in sources["top"]["text"]
-    assert sources["top.a"]["file"] == str(top)
-    assert "a : in std_logic" in sources["top.a"]["text"]
-    assert "u : entity work.child" in sources["top.u"]["text"]
-    assert sources["top.u.a"]["file"] == str(child)
-    assert "a : in std_logic" in sources["top.u.a"]["text"]
+    sources = {path: api.get_source(list(path), context_lines=0) for path in
+               (("top",), ('top', 'a',), ('top', 'u',), ('top', 'u', 'a',))}
+    assert "entity top is" in sources[("top",)]["text"]
+    assert sources[('top', 'a',)]["file"] == str(top)
+    assert "a : in std_logic" in sources[('top', 'a',)]["text"]
+    assert "u : entity work.child" in sources[('top', 'u',)]["text"]
+    assert sources[('top', 'u', 'a',)]["file"] == str(child)
+    assert "a : in std_logic" in sources[('top', 'u', 'a',)]["text"]
     snapshot = str(tmp_path / "snapshot")
     api.save_snapshot(snapshot)
     SESSION.reset()
     api.load_snapshot(snapshot)
-    assert {p: api.get_source(p, context_lines=0) for p in sources} == sources
+    assert {p: api.get_source(list(p), context_lines=0) for p in sources} == sources
 
 
 def test_snapshot_reload_brings_vhdl_intent_back(tmp_path, vhdl_file, monkeypatch):
@@ -117,7 +117,7 @@ def test_snapshot_reload_brings_vhdl_intent_back(tmp_path, vhdl_file, monkeypatc
         result = api.load_snapshot(snapshot)
     assert result["intent_loaded"] is True
     assert api.status()["intent_loadable"] is True
-    assert api.get_intent("wire_top.a", want="type")["type"] == "std_logic"
+    assert api.get_intent(['wire_top', 'a'], want="type")["type"] == "std_logic"
 
 
 def test_signal_and_inferred_register_source_roundtrip(tmp_path):
@@ -138,10 +138,10 @@ end architecture;
 """)
     with pytest.warns(RuntimeWarning, match="Beta"):
         api.load_vhdl(str(source))
-    declaration = api.get_source("seq_top.state", context_lines=0)
+    declaration = api.get_source(['seq_top', 'state'], context_lines=0)
     assert declaration["start"] == declaration["end"] == 7
     assert declaration["text"].strip() == "signal state : std_logic;"
-    driver = api.get_drivers("seq_top.q")["leaf_drivers"][0]
+    driver = api.get_drivers(['seq_top', 'q'])["leaf_drivers"][0]
     process = api.get_source(driver["path"], context_lines=0)
     assert process["start"] == 9 and process["end"] == 11
     assert "rising_edge(clk)" in process["text"]
@@ -149,7 +149,7 @@ end architecture;
     api.save_snapshot(snapshot)
     SESSION.reset()
     api.load_snapshot(snapshot)
-    assert api.get_source("seq_top.state", context_lines=0) == declaration
+    assert api.get_source(['seq_top', 'state'], context_lines=0) == declaration
     assert api.get_source(driver["path"], context_lines=0) == process
 
 

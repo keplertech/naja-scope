@@ -52,25 +52,25 @@ def test_module_card_suggestions(uart_session):
 
 
 def test_find_instances(uart_session):
-    out = api.find("u_*cnt", kind="instance")
-    paths = {m["path"] for m in out["matches"]}
-    assert "uart_top.u_tx.u_div_cnt" in paths
-    assert "uart_top.u_tx.u_bit_cnt" in paths
+    out = api.find(['**', 'u_*cnt'], kind="instance")
+    paths = {tuple(m["path"]) for m in out["matches"]}
+    assert ('uart_top', 'u_tx', 'u_div_cnt') in paths
+    assert ('uart_top', 'u_tx', 'u_bit_cnt') in paths
 
 
 def test_find_pagination(uart_session):
-    page1 = api.find("*", kind="instance", limit=3)
+    page1 = api.find(['**', '*'], kind="instance", limit=3)
     assert page1["count"] == 3
     assert page1["has_more"] is True
-    page2 = api.find("*", kind="instance", limit=3,
+    page2 = api.find(['**', '*'], kind="instance", limit=3,
                      cursor=page1["next_cursor"])
-    p1 = {m["path"] for m in page1["matches"]}
-    p2 = {m["path"] for m in page2["matches"]}
+    p1 = {tuple(m["path"]) for m in page1["matches"]}
+    p2 = {tuple(m["path"]) for m in page2["matches"]}
     assert not (p1 & p2)
 
 
 def test_find_module(uart_session):
-    out = api.find("counter*", kind="module")
+    out = api.find(['counter*'], kind="module")
     assert len(out["matches"]) >= 2  # counter + counter__elab1
 
 

@@ -33,14 +33,14 @@ def test_walkthrough_loads(example_session):
 
 
 def test_walkthrough_hierarchy(example_session):
-    root = api.get_hierarchy("uart_top", depth=1)["root"]
+    root = api.get_hierarchy(['uart_top'], depth=1)["root"]
     assert root["name"] == "uart_top"
     child_names = [c["name"] for c in root["children"]]
     assert "u_tx" in child_names
 
 
 def test_walkthrough_drivers_of_tx_o(example_session):
-    leaf = api.get_drivers("uart_top.tx_o")["leaf_drivers"][0]
+    leaf = api.get_drivers(['uart_top', 'tx_o'])["leaf_drivers"][0]
     assert "dff" in leaf["model"]
     assert leaf["is_sequential"] is True
     assert leaf["pin"] == "Q"
@@ -48,14 +48,14 @@ def test_walkthrough_drivers_of_tx_o(example_session):
 
 
 def test_walkthrough_source_behind_flop(example_session):
-    leaf = api.get_drivers("uart_top.tx_o")["leaf_drivers"][0]
+    leaf = api.get_drivers(['uart_top', 'tx_o'])["leaf_drivers"][0]
     src = api.get_source(leaf["path"])
     assert "uart.sv" in src["src"]
     assert "tx_o" in (src.get("text") or "")
 
 
 def test_walkthrough_fanin_cone_fully_combinational(example_session):
-    cone = api.trace_cone("uart_top.u_tx.state_n", "fanin")
+    cone = api.trace_cone(['uart_top', 'u_tx', 'state_n'], "fanin")
     assert cone["node_count"] >= 2
     assert cone["frontier"]["blackbox_count"] == 0
     assert cone["frontier"]["flop_count"] >= 1

@@ -39,7 +39,7 @@ def test_gate_level_loads(gate_session):
 
 
 def test_gate_level_hierarchy_is_cells(gate_session):
-    root = api.get_hierarchy("counter2", depth=1)["root"]
+    root = api.get_hierarchy(['counter2'], depth=1)["root"]
     models = sorted(c["model"] for c in root["children"])
     # 2 flops + an inverter + an xor, all standard cells from the library.
     assert models == ["DFF", "DFF", "INV", "XOR2"]
@@ -54,14 +54,14 @@ def test_gate_level_module_card_counts(gate_session):
 
 
 def test_gate_level_resolve_cell(gate_session):
-    m = api.resolve("counter2.u_ff0")["matches"][0]
+    m = api.resolve(['counter2', 'u_ff0'])["matches"][0]
     assert m["kind"] == "instance"
     assert m["model"] == "DFF"
 
 
 def test_gate_level_drivers_of_output(gate_session):
-    leaf = api.get_drivers("counter2.q1")["leaf_drivers"][0]
-    assert leaf["path"] == "counter2.u_ff1"
+    leaf = api.get_drivers(['counter2', 'q1'])["leaf_drivers"][0]
+    assert leaf["path"] == ['counter2', 'u_ff1']
     assert leaf["model"] == "DFF"
     assert leaf["pin"] == "Q"
 
@@ -72,7 +72,7 @@ def test_gate_level_fanin_cone_stops_at_flops(gate_session):
     # najaeda's Liberty constructor resolves into sequential pin roles
     # (najaeda>=0.7.19), so the native cone classifies both as flops rather
     # than opaque black boxes.
-    cone = api.trace_cone("counter2.u_ff1.D", "fanin")
-    stopped = {f["path"] for f in cone["frontier"]["flops"]}
-    assert stopped == {"counter2.u_ff0", "counter2.u_ff1"}
+    cone = api.trace_cone(['counter2', 'u_ff1', 'D'], "fanin")
+    stopped = {tuple(f["path"]) for f in cone["frontier"]["flops"]}
+    assert stopped == {('counter2', 'u_ff0'), ('counter2', 'u_ff1')}
     assert cone["frontier"]["blackboxes"] == []

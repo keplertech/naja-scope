@@ -1,18 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Hierarchical path resolution — the make-or-break tool.
-
-Paths are dot-separated: `top.u_uart.tx_q_reg`, `top.u_cnt.count[3]`. The top
-segment is optional. The final segment may be an instance, a term (port of the
-instance reached so far), or a net (inside the design of the instance reached
-so far), with an optional bit select. A failed segment produces did-you-mean
-suggestions instead of a bare error; the final segment may use glob patterns.
-
-Everything here runs on the raw SNL layer via `snl` (InstNode + raw terms/nets).
-"""
+"""Literal hierarchical paths: one exact name per list element, plus a bit field."""
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -20,34 +10,20 @@ from . import snl
 from .errors import ResolveError, ScopeError
 from .source_index import SrcRange
 
-_BIT_RE = re.compile(r"^(.*)\[(-?\d+)\]$")
 _MAX_SUGGESTION_SCAN = 2000
 
 
-def split_path(path: str) -> List[str]:
-    """Split on dots, but not inside brackets (net[3] stays one segment)."""
-    segments, buf, depth = [], [], 0
-    for ch in path:
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth = max(0, depth - 1)
-        if ch == "." and depth == 0:
-            if buf:
-                segments.append("".join(buf))
-                buf = []
-        else:
-            buf.append(ch)
-    if buf:
-        segments.append("".join(buf))
-    return segments
+def validate_path(path: List[str]) -> List[str]:
+    if not isinstance(path, list) or any(not isinstance(n, str) or not n for n in path):
+        raise ScopeError("path must be a JSON list of non-empty exact names; string paths are not accepted.")
+    return path
 
 
 @dataclass
 class Resolved:
     kind: str                  # "instance" | "term" | "net"
     obj: object                # snl.InstNode | raw SNL term/net (bit if selected)
-    path: str                  # canonical path including top name
+    path: List[str]            # canonical exact names including top
     owner: snl.InstNode        # InstNode owning the term/net (or the parent)
     bit: Optional[int] = None  # explicit bit select, if any
 
@@ -61,7 +37,7 @@ def _safe(fn):
 
 def describe(resolved: Resolved, session=None) -> dict:
     """Compact descriptor dict for one resolved object."""
-    out = {"kind": resolved.kind, "path": resolved.path}
+    out = {"kind": resolved.kind, "path": resolved.path, "bit": resolved.bit}
     obj = resolved.obj
     if resolved.kind == "instance":
         out["model"] = obj.model_name
@@ -73,15 +49,11 @@ def describe(resolved: Resolved, session=None) -> dict:
     elif resolved.kind == "term":
         out["dir"] = snl.direction_str(obj.getDirection())
         out["width"] = snl.obj_width(obj)
-        if resolved.bit is not None:
-            out["bit"] = resolved.bit
         role = snl.role_str(_safe(lambda: obj.getRole()))
         if role:
             out["role"] = role
     elif resolved.kind == "net":
         out["width"] = snl.obj_width(obj)
-        if resolved.bit is not None:
-            out["bit"] = resolved.bit
     src = source_ref(resolved, session)
     if src:
         out["src"] = src
@@ -145,7 +117,7 @@ def _level_names(node: snl.InstNode, cap: int = _MAX_SUGGESTION_SCAN):
 def _suggest(segment: str, node: snl.InstNode) -> List[str]:
     import difflib
     children, terms, nets = _level_names(node)
-    pool = children + terms + nets
+    pool = list(dict.fromkeys(name for name in children + terms + nets if name))
     close = difflib.get_close_matches(segment, pool, n=8, cutoff=0.5)
     lowered = segment.lower()
     for name in pool:
@@ -156,120 +128,45 @@ def _suggest(segment: str, node: snl.InstNode) -> List[str]:
     return close[:8]
 
 
-def _match_segment(node: snl.InstNode, segment: str, is_last: bool,
-                   prefix: str) -> List[Resolved]:
-    """All objects a segment can denote at this level."""
-    matches: List[Resolved] = []
-    m = _BIT_RE.match(segment)
-
-    def add_instance(child: snl.InstNode):
-        matches.append(Resolved("instance", child, child.path, node))
-
-    def add_term(term, bit_sel):
-        obj = term
-        if bit_sel is not None:
-            picked = snl.term_bit(term, bit_sel)
-            if picked is None:
-                return
-            obj = picked
-        matches.append(Resolved("term", obj, f"{prefix}.{segment}",
-                                node, bit_sel))
-
-    def add_net(net, bit_sel):
-        obj = net
-        if bit_sel is not None:
-            picked = snl.net_bit(net, bit_sel)
-            if picked is None:
-                return
-            obj = picked
-        matches.append(Resolved("net", obj, f"{prefix}.{segment}",
-                                node, bit_sel))
-
-    # Literal name first (covers names that legitimately contain brackets).
-    child = snl.child_node(node, segment)
-    if child is not None:
-        add_instance(child)
-    if is_last:
-        term = node.design.getTerm(segment)
-        if term is not None:
-            add_term(term, None)
-        net = node.design.getNet(segment)
-        if net is not None:
-            add_net(net, None)
-    # Bit-select interpretation.
-    if m and not matches:
-        base, bit = m.group(1), int(m.group(2))
-        if is_last:
-            term = node.design.getTerm(base)
-            if term is not None:
-                add_term(term, bit)
-            net = node.design.getNet(base)
-            if net is not None:
-                add_net(net, bit)
-    # Glob in the final segment.
-    if is_last and not matches and any(c in segment for c in "*?["):
-        import fnmatch
-        children, terms, nets = _level_names(node)
-        for name in children:
-            if fnmatch.fnmatchcase(name, segment):
-                c = snl.child_node(node, name)
-                if c is not None:
-                    add_instance(c)
-        for name in terms:
-            if fnmatch.fnmatchcase(name, segment):
-                t = node.design.getTerm(name)
-                if t is not None:
-                    matches.append(Resolved("term", t, f"{prefix}.{name}", node))
-        for name in nets:
-            if fnmatch.fnmatchcase(name, segment):
-                n = node.design.getNet(name)
-                if n is not None:
-                    matches.append(Resolved("net", n, f"{prefix}.{name}", node))
-    return matches
-
-
-def resolve_path(session, path: str,
-                 kind: Optional[str] = None) -> List[Resolved]:
-    """Resolve a path to objects; raises ResolveError with suggestions."""
+def resolve_path(session, path: List[str], kind: Optional[str] = None,
+                 bit: Optional[int] = None) -> List[Resolved]:
+    """Walk exact names, without parsing, unescaping, globbing or rejoining."""
+    validate_path(path)
+    if bit is not None and type(bit) is not int:
+        raise ScopeError("bit must be an integer or null.")
+    if kind not in (None, "instance", "term", "net"):
+        raise ScopeError("kind must be instance, term or net.")
     session.require_top()
-    top = snl.top_node()
-    top_name = top.name
-    segments = split_path(path.strip())
-    if not segments:
-        raise ScopeError("Empty path.")
-    if segments[0] == top_name:
-        segments = segments[1:]
-    if not segments:
-        return [Resolved("instance", top, top_name, top)]
-
-    node = top
-    prefix = top_name
-    i = 0
-    while i < len(segments):
-        for end in range(i + 1, len(segments) + 1):
-            # VHDL generate labels put dots inside one instance name, so a
-            # segment that matches nothing may continue into the next ones.
-            segment = ".".join(segments[i:end])
-            is_last = end == len(segments)
-            matches = _match_segment(node, segment, is_last, prefix)
-            if is_last:
-                if matches and kind:
-                    matches = [m for m in matches if m.kind == kind]
-                    if not matches:
-                        raise ResolveError(path, segment, _suggest(segment, node))
-                if matches:
-                    return matches
-                continue
-            inst_matches = [m for m in matches if m.kind == "instance"]
-            if inst_matches:
-                node = inst_matches[0].obj
-                prefix = inst_matches[0].path
-                i = end
-                break
-        else:
-            raise ResolveError(path, segments[i], _suggest(segments[i], node))
-    raise ResolveError(path, segments[-1])
-
-
-def instance_path_str(node: snl.InstNode, session=None) -> str:
-    return node.path
+    node = snl.top_node()
+    start = int(bool(path) and path[0] == node.name)
+    if start == len(path):
+        if bit is not None or kind not in (None, "instance"):
+            raise ScopeError("The top is an instance and cannot have a bit select.")
+        return [Resolved("instance", node, node.path, node)]
+    for index in range(start, len(path)):
+        name = path[index]
+        last = index == len(path) - 1
+        matches = []
+        child = snl.child_node(node, name)
+        if child is not None and bit is None:
+            matches.append(Resolved("instance", child, child.path, node))
+        if last:
+            for obj_kind, getter, picker in (
+                    ("term", node.design.getTerm, snl.term_bit),
+                    ("net", node.design.getNet, snl.net_bit)):
+                obj = getter(name)
+                if obj is not None:
+                    if bit is not None:
+                        # Scalar names, including brackets, never imply bus bits.
+                        if type(obj).__name__ not in ("SNLBusTerm", "SNLBusNet"):
+                            continue
+                        obj = picker(obj, bit)
+                    if obj is not None:
+                        matches.append(Resolved(obj_kind, obj, node.path + [name], node, bit))
+            matches = [m for m in matches if kind is None or m.kind == kind]
+            if matches:
+                return matches
+        elif child is not None:
+            node = child
+            continue
+        raise ResolveError(path, index, node.path, _suggest(name, node))

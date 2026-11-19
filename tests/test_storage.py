@@ -89,7 +89,7 @@ def test_memory_and_register_counts(tmp_path):
     assert stats['flat_rom_instances'] == stats['flat_ram_instances'] == 2
     assert stats['flat_register_bits_unknown_instances'] == 0
     assert stats['has_more'] is True
-    subtree = api.get_stats('top.u0')
+    subtree = api.get_stats(['top', 'u0'])
     assert subtree['flat_register_bits'] == 5
     assert subtree['flat_memory_bits'] == 64
     snapshot = tmp_path / 'snapshot'
@@ -125,7 +125,7 @@ def test_memory_details_are_bounded(tmp_path):
 def test_liberty_bank_counts_states_not_outputs(tmp_path):
     lib = tmp_path / 'bank.lib'
     lib.write_text(LIB)
-    source = tmp_path / 'top.v'
+    source = tmp_path / "top.v"
     source.write_text('''module top(input clk, a, b, output q0, q1);
       PAIR u_bank(.CK(clk), .D0(a), .D1(b), .Q0(q0), .Q1(q1));
     endmodule''')

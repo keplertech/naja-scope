@@ -51,30 +51,17 @@ def _bits_of(resolved: Resolved) -> List:
                      "term or net.")
 
 
-def _subtree_key(path: str) -> str:
-    """Top-level submodule a hierarchical path lives in: `top.<submodule>`.
-
-    `cva6.ex_stage_i.i_mult.i_div.state_q` -> `cva6.ex_stage_i`. A path sitting
-    directly under the top (`cva6.some_reg`) yields just the top name.
-    """
-    segs = path.split(".")
-    return ".".join(segs[:2]) if len(segs) >= 3 else segs[0]
+def _subtree_key(path):
+    return tuple(path[:2] if len(path) >= 3 else path[:1])
 
 
-def _port_label(netcomp) -> str:
-    top = snl.top_design().getName()
-    name = netcomp.getName()
-    bit = None
-    if type(netcomp).__name__ == "SNLBusTermBit":
-        try:
-            bit = netcomp.getBit()
-        except Exception:
-            bit = None
-    return f"{top}.{name}" + (f"[{bit}]" if bit is not None else "")
+def _port_label(netcomp):
+    return (snl.top_design().getName(), netcomp.getName(),
+            netcomp.getBit() if type(netcomp).__name__ == "SNLBusTermBit" else None)
 
 
 def _leaf_record(inst, ids) -> dict:
-    entry = {"path": snl.path_str_from_ids(ids),
+    entry = {"path": snl.path_from_ids(ids), "kind": "instance", "bit": None,
              "label": snl.friendly_label(inst),
              "model": inst.getModel().getName()}
     loc = snl.source_loc(inst)
@@ -83,47 +70,23 @@ def _leaf_record(inst, ids) -> dict:
     return entry
 
 
-def _display_path(rec: dict) -> str:
-    """A readable path for a frontier record: its hierarchical path with the
-    trailing anonymous `#id` segment replaced by the driven-net label
-    (`cva6.csr_regfile_i.priv_lvl_q_dffrn`). Falls back to the raw path."""
-    head, _, tail = rec["path"].rpartition(".")
-    label = rec.get("label")
-    if head and tail.startswith("#") and label:
-        return f"{head}.{label}"
-    return rec["path"]
-
-
-def _cross_hierarchy(root_path: str, flops: Dict[str, dict]) -> dict:
-    """Group the flop frontier by top-level submodule and name the registers
-    outside the cone root's own subtree — the cross-hierarchy affordance: in one
-    call the agent learns whether (and where) the cone reaches register state
-    outside `<stage>`. Token-bounded: per-subtree counts plus a few example
-    paths, never a dump."""
+def _cross_hierarchy(root_path, flops):
     root_subtree = _subtree_key(root_path)
-    by_subtree: Dict[str, dict] = {}
-    for path, rec in flops.items():
-        key = _subtree_key(path)
-        bucket = by_subtree.setdefault(key, {"count": 0, "examples": []})
+    groups = {}
+    for rec in flops.values():
+        key = _subtree_key(rec["path"])
+        bucket = groups.setdefault(key, {"path": list(key), "count": 0, "examples": []})
         bucket["count"] += 1
         if len(bucket["examples"]) < 3:
-            # Show the readable label for the register, not its `#id` segment,
-            # so the agent learns *which* registers the cone reaches.
-            bucket["examples"].append(_display_path(rec))
-
-    outside = {k: v for k, v in by_subtree.items() if k != root_subtree}
-    outside_examples: List[str] = []
-    for v in outside.values():
-        outside_examples.extend(v["examples"])
-
+            bucket["examples"].append(rec["path"])
+    outside = [v for k, v in groups.items() if k != root_subtree]
     return {
-        "root_subtree": root_subtree,
-        "by_subtree": dict(
-            sorted(by_subtree.items(), key=lambda kv: -kv[1]["count"])[:20]),
+        "root_subtree": list(root_subtree),
+        "by_subtree": sorted(groups.values(), key=lambda v: -v["count"])[:20],
         "outside_root_subtree": {
-            "count": sum(v["count"] for v in outside.values()),
-            "subtrees": sorted(outside.keys()),
-            "examples": outside_examples[:10],
+            "count": sum(v["count"] for v in outside),
+            "subtrees": sorted(v["path"] for v in outside),
+            "examples": [p for v in outside for p in v["examples"]][:10],
         },
     }
 
@@ -158,19 +121,19 @@ def trace_cone(resolved: Resolved, session, direction: str,
                 if nc is None:
                     continue
                 label = _port_label(nc)
-                ports.setdefault(label, {"port": label})
+                ports.setdefault(label, {"port": list(label[:2]), "path": list(label[:2]), "bit": label[2], "kind": "term"})
                 continue
             inst, ids = snl.occurrence_leaf(leaf_occ)
             if inst is None:
                 continue
             rec = _leaf_record(inst, ids)
             if kind == "flop":
-                if rec["path"] not in flops:
-                    flops[rec["path"]] = rec
+                if tuple(rec["path"]) not in flops:
+                    flops[tuple(rec["path"])] = rec
                     counts_by_model[rec["model"]] = (
                         counts_by_model.get(rec["model"], 0) + 1)
             else:  # blackbox (opaque leaf cell) or any other un-crossed leaf
-                blackboxes.setdefault(rec["path"], rec)
+                blackboxes.setdefault(tuple(rec["path"]), rec)
 
     flop_list = sorted(flops.values(), key=lambda r: r["path"])
     bb_list = sorted(blackboxes.values(), key=lambda r: r["path"])
@@ -180,7 +143,7 @@ def trace_cone(resolved: Resolved, session, direction: str,
                           or len(port_list) > max_frontier)
 
     out = {
-        "root": resolved.path,
+        "root": resolved.path, "bit": resolved.bit, "kind": resolved.kind,
         "direction": direction,
         "stop": "flops",  # native cone always stops at flops/ports/black boxes
         "seed_bits": len(bits),

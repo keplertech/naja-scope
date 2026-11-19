@@ -55,7 +55,7 @@ turns your design into something an agent can *navigate*:
   parameter formulas that normally vanish when a design is elaborated.
 
 Requires **najaeda 0.7.35 or newer**. See the
-[0.1.26 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.1.26.md)
+[0.2.0 release notes](https://github.com/keplertech/naja-scope/blob/main/docs/releases/0.2.0.md)
 for test results and snapshot migration requirements.
 
 Works on **RTL and gate-level netlists** alike: load elaborated SystemVerilog
@@ -269,19 +269,36 @@ that record fields report widths, not bit positions. Validated on the
 
 ## What you can ask
 
-`find` uses case-sensitive globs: use `*state*`. Regex-style patterns such as
-`.*state.*` return a corrective hint without scanning the hierarchy. When a
-search misses a known parameter, a warm intent session points to `get_intent`.
-Use `get_intent("top.inst.PARAM")` for one parameter, `get_intent("pkg::NAME")`
-for a package member, or `get_intent("pkg", want="parameters")` to list package
+All hierarchical paths use JSON lists of exact names, optionally starting
+with the top name. String paths are rejected. For example:
+
+```python
+resolve(path=["u_core", "d_in"], bit=0, kind="term")
+# {"matches": [{"path": ["top", "u_core", "d_in"], "bit": 0, "kind": "term", ...}], ...}
+resolve(path=["u_core", "d_in[0]"], kind="term")  # literal scalar name
+resolve(path=["a.b"])       # one instance named a.b
+resolve(path=["a", "b"])  # b inside a
+find(pattern=["**", "*state*"], kind="net")
+```
+
+Each element is literal: no splitting, unescaping, or bracket parsing.
+Copy returned `path`, `bit`, and `kind` into `resolve` to select the same
+object. See [the path contract](docs/paths.md) for migration details.
+
+`find` uses lists of case-sensitive globs: use `["**", "*state*"]` to
+search at any depth. Each element matches one name; `"**"` matches zero or
+more hierarchy levels. Dots, slashes and dollar signs have no separator or
+regex meaning. When a search misses a known parameter, a warm intent session points to `get_intent`.
+Use `get_intent(["top", "inst", "PARAM"])` for one parameter, `get_intent(["pkg::NAME"])`
+for a package member, or `get_intent(["pkg"], want="parameters")` to list package
 parameters. SystemVerilog package listing discovers names from available
 source files and validates them through the live engine; macro-generated
 names may require an explicit `pkg::NAME` query.
 
 Once a design is loaded, your assistant can:
 
-- **Resolve** any signal or instance by hierarchical path (with glob and
-  did-you-mean suggestions).
+- **Resolve** any signal or instance by an exact-name list (with
+  indexed did-you-mean suggestions).
 - **Find** objects design-wide by pattern.
 - **Show the hierarchy** of any module.
 - **Get drivers / loads** of a net — the real endpoints, across hierarchy;
@@ -371,25 +388,26 @@ pip install "naja-scope[schematic]"
 
 Restart the MCP server after installation. Load a design as usual, then use:
 
-- `open_schematic(path="top.u_cpu")`: returns a local browser URL and focuses
+- `open_schematic(path=["top", "u_cpu"])`: returns a local browser URL and focuses
   the instance. Omit `path` for the top. Anonymous `#id` instances are supported.
-- `annotate_schematic(items=[{"path": "top.u_cpu", "message": "Check reset",
+- `annotate_schematic(items=[{"path": ["top", "u_cpu"], "message": "Check reset",
   "severity": "warning"}])`: replaces the overlay. Use `kind="term"` with a
   pin/port path to annotate that terminal; annotations apply to the whole port,
   not individual bus bits. Pass `items=[]` to clear. At most 200 annotations,
   each with at most 2000 message characters.
 - `get_schematic_selection()`: returns the last clicked instance as a regular
   naja-scope path, usable with source, hierarchy and module-card queries.
-- `show_schematic_net(path="top.u_cpu.D[3]", trace=True)`: draws the pin's
+- `show_schematic_net(path=["top", "u_cpu", "D"], bit=3, trace=True)`: draws the pin's
   combinational fan-in cone back to flops, ports and blackboxes. With
   `trace=False` (the default), draws just its net. Use `add=False` to clear the
   drawing first, and `color="#ff8800"` to choose a trace color. Targets are
   pin/port paths, with one bit selected for a bus; anonymous `#id` paths work.
-- `export_schematic(file="cone.svg", traces=["top.u_cpu.D[3]"])`: renders
+- `export_schematic(file="cone.svg", traces=[{"path": ["top", "u_cpu", "D"], "bit": 3}])`: renders
   directly from the loaded design, without starting a browser. Use `.png`
   for PNG (`scale=2` for twice the resolution). Combine `instances`, `nets`
   and `traces` lists, up to 200 total targets. Instances draw boxes; nets and
-  traces take pin/port paths. The top has no box: use its ports instead.
+  traces take `{ "path": ["top", "u_cpu", "D"], "bit": 3 }` records.
+  Instances take lists such as `[["top", "u_cpu"]]`. The top has no box: use its ports instead.
   Returns the local file path, format and byte size; overwrites an existing
   file. The renderer is included in supported platform wheels.
 

@@ -44,17 +44,15 @@ def _options(options):
     return options
 
 
-def _resolve_one(path, kind):
-    if not isinstance(path, str):
-        raise ScopeError("Schematic targets must be naja-scope path strings.")
-    matches = resolve_path(SESSION, path, kind=kind)
+def _resolve_one(path, kind, bit=None):
+    matches = resolve_path(SESSION, path, kind=kind, bit=bit)
     if len(matches) != 1 or matches[0].kind != kind:
         raise ScopeError(f"Schematic target requires one {kind}.")
     return matches[0]
 
 
-def _pin(path):
-    resolved = _resolve_one(path, "term")
+def _pin(path, bit=None):
+    resolved = _resolve_one(path, "term", bit=bit)
     if resolved.bit is None and snl.obj_width(resolved.obj) != 1:
         raise ScopeError("Select one bus bit for a schematic net or trace.")
     # IDs preserve anonymous instances and names containing punctuation.
@@ -116,14 +114,14 @@ def open_schematic(path=None, view_options=None):
     if options is not None:
         viewer.view_options(options)
     viewer.show_instance(list(node.snlpath.getInstanceIDs()))
-    return {"url": viewer.url, "path": node.path,
+    return {"url": viewer.url, "path": node.path, "bit": None, "kind": "instance",
             "note": "Open this URL in a browser on the MCP server's machine."}
 
 
 @serialized
-def show_schematic_net(path, trace=False, add=True, color=None):
+def show_schematic_net(path, trace=False, add=True, color=None, bit=None):
     SESSION.require_top()
-    pin = _pin(path)
+    pin = _pin(path, bit=bit)
     if type(trace) is not bool or type(add) is not bool:
         raise ScopeError("Schematic trace and add must be booleans.")
     if color is not None and (not isinstance(color, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", color)):
@@ -133,7 +131,7 @@ def show_schematic_net(path, trace=False, add=True, color=None):
         viewer.show_net(pin, trace=trace, add=add, color=color)
     except (ValueError, TypeError) as exc:
         raise ScopeError(str(exc)) from exc
-    return {"url": viewer.url, "path": path, "trace": trace}
+    return {"url": viewer.url, "path": _resolve_one(path, "term", bit).path, "bit": bit, "kind": "term", "trace": trace}
 
 
 @serialized
@@ -152,8 +150,12 @@ def export_schematic(file, instances=None, nets=None, traces=None,
     insts = [_resolve_one(path, "instance").obj.snlpath for path in groups[0]]
     if any(not list(path.getInstanceIDs()) for path in insts):
         raise ScopeError("The top has no schematic box; export nets or traces on its ports.")
-    pins = [_pin(path) for path in groups[1]]
-    cones = [_pin(path) for path in groups[2]]
+    def target(item):
+        if not isinstance(item, dict) or set(item) - {"path", "bit"}:
+            raise ScopeError("Net and trace targets must be objects with path and optional bit.")
+        return _pin(item.get("path"), item.get("bit"))
+    pins = [target(item) for item in groups[1]]
+    cones = [target(item) for item in groups[2]]
     options = _options(view_options)
     package = _package()
     kwargs = dict(instances=insts, nets=pins, traces=cones, view_options=options,
@@ -179,13 +181,13 @@ def annotate_schematic(items):
     for item in items:
         if not isinstance(item, dict):
             raise ScopeError("Each annotation must be an object.")
+        if set(item) - {"path", "bit", "kind", "severity", "message"}:
+            raise ScopeError("Unknown annotation field; use path, bit, kind, severity and message.")
         kind = item.get("kind", "instance")
         if kind not in ("instance", "term"):
             raise ScopeError("Annotation kind must be instance or term (a pin/port).")
         path = item.get("path")
-        if not isinstance(path, str):
-            raise ScopeError("Annotation path must be a naja-scope path string.")
-        matches = resolve_path(SESSION, path, kind=kind)
+        matches = resolve_path(SESSION, path, kind=kind, bit=item.get("bit"))
         if len(matches) != 1 or matches[0].kind != kind:
             raise ScopeError("Each annotation must resolve to one object of the requested kind.")
         resolved = matches[0]
@@ -227,6 +229,6 @@ def get_schematic_selection():
             design = inst.getModel()
         else:
             node = snl.node_from_ids(ids)
-            selection = {"kind": "instance", "path": node.path,
+            selection = {"kind": "instance", "path": node.path, "bit": None,
                          "model": node.model_name}
     return {"selection": selection, "url": _viewer.url if _viewer else None}

@@ -37,7 +37,7 @@ from pathlib import Path
 from najaeda import naja
 
 from .errors import ScopeError
-from .resolve import resolve_path
+from .resolve import resolve_path, validate_path
 
 # A sized Verilog literal, e.g. "32'd1", "8'hff", "4'b0101" (optionally signed).
 # Parameter values sometimes come back this way; agents (and the eval goldens)
@@ -158,9 +158,10 @@ class IntentProvider:
 
     # -- public queries ------------------------------------------------------
 
-    def get_type(self, ref: str) -> dict:
+    def get_type(self, ref: list[str]) -> dict:
         """Declared type of a value (net/term), incl. enum members+encodings."""
-        if "::" in ref:
+        validate_path(ref)
+        if len(ref) == 1 and "::" in ref[0]:
             return self._package_record(ref)
         resolved = resolve_path(self.session, ref)[0]
         obj = self._intent_obj(resolved)
@@ -168,13 +169,13 @@ class IntentProvider:
         if rec is not None and self._vhdl:
             rec = self._vhdl_value_type(obj, rec)
         if rec is None:
-            return {"ref": ref, "label": resolved.path.split(".")[-1],
+            return {"ref": ref, "label": resolved.path[-1],
                     "note": (f"no source type recovered for {ref} (non-enum "
                              "scalar, or no source symbol for this object).")}
         rec["ref"] = ref
         return rec
 
-    def get_fsm_states(self, ref: str) -> dict:
+    def get_fsm_states(self, ref: list[str]) -> dict:
         """Enum members+encodings for an enum-typed register (the FSM-state /
         package-typedef-enum gate). Notes clearly when the ref is not enum."""
         rec = self.get_type(ref)
@@ -184,10 +185,11 @@ class IntentProvider:
                                     f"(type {rec.get('type', '?')}); no FSM states."))
         return rec
 
-    def get_parameters(self, ref: str, symbolic: bool = True) -> dict:
+    def get_parameters(self, ref: list[str], symbolic: bool = True) -> dict:
         """Parameters + localparams of an instance/module, with their SYMBOLIC
         initializer text (lost in lowering) alongside the elaborated value."""
-        if "::" in ref:
+        validate_path(ref)
+        if len(ref) == 1 and "::" in ref[0]:
             return self._package_record(ref)
         try:
             obj = self._resolve_instance_obj(ref)
@@ -195,7 +197,7 @@ class IntentProvider:
             parameter = self.parameter_path(ref)
             if parameter is not None:
                 return parameter
-            package = self.packages().get(self._key(ref))
+            package = self.packages().get(self._key(ref[0])) if len(ref) == 1 else None
             if package is not None:
                 return {"ref": ref, "package": ref, "parameters": package,
                         "count": len(package)}
@@ -217,9 +219,10 @@ class IntentProvider:
         rec["ref"] = ref
         return rec
 
-    def describe(self, ref: str) -> dict:
+    def describe(self, ref: list[str]) -> dict:
         """Auto-dispatch on the ref's kind, matching get_intent(want='auto')."""
-        if "::" in ref:
+        validate_path(ref)
+        if len(ref) == 1 and "::" in ref[0]:
             rec = self._package_record(ref)
             return {"intent": "type" if "canonical_kind" in rec else "parameter",
                     **rec}
@@ -237,11 +240,11 @@ class IntentProvider:
     def _key(self, name: str) -> str:
         return name.lower() if self._vhdl else name
 
-    def parameter_path(self, ref: str) -> dict | None:
+    def parameter_path(self, ref: list[str]) -> dict | None:
         """Only reinterpret the final segment after structural resolution fails."""
-        parent, dot, name = ref.rpartition(".")
-        if not dot:
+        if len(ref) < 2:
             return None
+        parent, name = ref[:-1], ref[-1]
         try:
             obj = self._resolve_instance_obj(parent)
         except ScopeError:
@@ -317,7 +320,7 @@ class IntentProvider:
                         if decl.get("kind") == "constant":
                             ref = f"{decl['owner']}::{decl['name']}"
                             params[self._key(decl["name"])] = {
-                                **_vhdl_parameter(decl), "ref": ref}
+                                **_vhdl_parameter(decl), "ref": [ref]}
         else:
             for text in self._source_texts():
                 text = re.sub(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"',
@@ -331,7 +334,7 @@ class IntentProvider:
                         if rec is not None and "value" in rec:
                             packages.setdefault(pkg, {})[name] = {
                                 **rec, "value": _decimal_value(rec["value"]),
-                                "ref": f"{pkg}::{name}"}
+                                "ref": [f"{pkg}::{name}"]}
         self._packages = {pkg: list(params.values()) for pkg, params in packages.items()}
         self._package_sources = sources
         return self._packages
@@ -346,10 +349,10 @@ class IntentProvider:
             for p in params:
                 if p.get("owner_kind") != "package" and fnmatch.fnmatchcase(p["name"], pattern):
                     return (f"{p['name']} is a parameter of module {design.getName()}; "
-                            f"use get_intent({design.getName()!r}, want='parameters').")
+                            f"use get_intent({[design.getName()]!r}, want='parameters').")
         for params in self.packages().values():
             for p in params:
-                if fnmatch.fnmatchcase(p["name"], pattern) or fnmatch.fnmatchcase(p["ref"], pattern):
+                if fnmatch.fnmatchcase(p["name"], pattern) or fnmatch.fnmatchcase(p["ref"][0], pattern):
                     return (f"{p['ref']} is a package parameter; "
                             f"use get_intent({p['ref']!r}).")
         return None
@@ -368,7 +371,7 @@ class IntentProvider:
                 out["constraint"] = _vhdl_range(constraint)
         return out
 
-    def _vhdl_package_record(self, ref: str, pkg: str, member: str) -> dict:
+    def _vhdl_package_record(self, ref: list[str], pkg: str, member: str) -> dict:
         """Package members are reached from the designs that see them: VHDL
         identifiers are case-insensitive, and naja keeps no name-keyed lookup."""
         from . import snl
@@ -382,7 +385,7 @@ class IntentProvider:
                         return {"name": decl["name"], "ref": ref,
                                 "src": _vhdl_src(decl.get("source")),
                                 **_vhdl_type(decl["resolved_type"])}
-                    return {**_vhdl_parameter(decl), "ref": ref}
+                    return {**_vhdl_parameter(decl), "ref": [ref]}
         raise ScopeError(
             f"intent: {member!r} not found in package {pkg!r} (or no elaborated "
             f"design uses that package) — {ref!r}")
@@ -397,7 +400,7 @@ class IntentProvider:
             return node.design if node.is_top else node.snl_instance
         return resolved.obj  # raw SNL net/term (or selected bit)
 
-    def _resolve_instance_obj(self, ref: str):
+    def _resolve_instance_obj(self, ref: list[str]):
         """SNLInstance / SNLDesign for a parameters query. Falls back to a bare
         module name not present in the instance hierarchy."""
         try:
@@ -405,15 +408,15 @@ class IntentProvider:
             return node.design if node.is_top else node.snl_instance
         except ScopeError:
             from . import snl
-            design = snl.find_design(ref)
+            design = snl.find_design(ref[0]) if len(ref) == 1 else None
             if design is None:
                 raise
             return design
 
-    def _package_record(self, ref: str) -> dict:
+    def _package_record(self, ref: list[str]) -> dict:
         """A package member (pkg::name) — name-keyed over the live compilation,
         since packages are not instantiated and have no SNL object."""
-        pkg, _, member = ref.partition("::")
+        pkg, _, member = ref[0].partition("::")
         if self._vhdl:
             return self._vhdl_package_record(ref, pkg, member)
         rec = naja.intentPackageMember(pkg, member)

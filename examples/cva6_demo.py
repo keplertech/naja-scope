@@ -42,9 +42,9 @@ os.environ.setdefault(
 
 FLIST = os.path.join(CVA6_REPO_DIR, "core/Flist.cva6")
 
-DIV_STATE_Q = "cva6.ex_stage_i.i_mult.i_div.state_q"
-DIV_STATE_D = "cva6.ex_stage_i.i_mult.i_div.state_d"
-NOC_REQ_O = "cva6.noc_req_o"
+DIV_STATE_Q = ['cva6', 'ex_stage_i', 'i_mult', 'i_div', 'state_q']
+DIV_STATE_D = ['cva6', 'ex_stage_i', 'i_mult', 'i_div', 'state_d']
+NOC_REQ_O = ['cva6', 'noc_req_o']
 
 
 def banner(title):
@@ -97,7 +97,7 @@ def main():
           f"{outside['count']} flop(s) in {sorted(outside['subtrees'])}")
     assert frontier["blackbox_count"] == 0, "cone should fully traverse combinational logic"
     assert outside["count"] > 0, "expected the cone to cross out of the EX stage"
-    assert "cva6.csr_regfile_i" in outside["subtrees"], (
+    assert ["cva6", "csr_regfile_i"] in outside["subtrees"], (
         "expected the divider's next state to be gated by CSR state")
 
     banner(f'Q: "What feeds the top-level output {NOC_REQ_O}?" '
@@ -107,7 +107,7 @@ def main():
     print(f"  nodes in cone     : {cone['node_count']}")
     print(f"  register frontier : {frontier['flop_count']} flop(s), "
           f"{frontier['blackbox_count']} black box(es)")
-    homes = sorted({".".join(f["path"].split(".")[:3]) for f in frontier["flops"]})
+    homes = sorted({tuple(f["path"][:3]) for f in frontier["flops"]})
     print(f"  frontier lives in : {homes}")
     # The request is registered inside the AXI adapter: its I/D-cache data
     # FIFOs are not fall-through, so the true fan-in stops at the adapter's
