@@ -23,9 +23,10 @@ def test_module_card(uart_session):
     assert card["counts"]["sequential_instances"] > 0
     # sequential_with_async_reset/_set are sound facts (SNLDesign role API on
     # each leaf model), not name-guessed -- uart_tx's flops are all
-    # `always_ff @(posedge clk or negedge rst_n)`, i.e. async reset, no set.
+    # `always_ff @(posedge clk or negedge rst_n)`: async reset to 0, except
+    # tx_o, whose reset value is 1, i.e. an async set (naja_dffs).
     assert card["counts"]["sequential_with_async_reset"] > 0
-    assert card["counts"]["sequential_with_async_set"] == 0
+    assert card["counts"]["sequential_with_async_set"] == 1
     assert "uart.sv" in card.get("src", "")
 
 

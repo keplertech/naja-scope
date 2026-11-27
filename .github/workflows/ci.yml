@@ -40,6 +40,21 @@ jobs:
       - name: Verify runner architecture
         run: python ci/check_architecture.py x86_64
 
+      - name: Key pip's cache on the najaeda release
+        # Every PyPI download of najaeda counts in its public download
+        # numbers: keep pip's cache, so a najaeda release is downloaded once
+        # per configuration. The JSON API is not a file download.
+        id: pip-cache
+        run: |
+          echo "dir=$(python -m pip cache dir)" >> "$GITHUB_OUTPUT"
+          echo "najaeda=$(python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/najaeda/json'))['info']['version'])")" >> "$GITHUB_OUTPUT"
+
+      - id: pip-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: pip-ci-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-najaeda${{ steps.pip-cache.outputs.najaeda }}-${{ hashFiles('pyproject.toml') }}
+
       - name: Install package + test dependencies
         run: |
           python -m pip install --upgrade pip
@@ -56,6 +71,15 @@ jobs:
         run: |
           python examples/walkthrough.py
           python examples/gate_level.py
+
+      - name: Save pip's cache, even if the job fails
+        # actions/cache only saves on success: a failing job would
+        # download everything again on every run.
+        if: always() && steps.pip-cache.outputs.dir != '' && steps.pip-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: pip-ci-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-najaeda${{ steps.pip-cache.outputs.najaeda }}-${{ hashFiles('pyproject.toml') }}
 
   platforms:
     name: ${{ matrix.name }} (Python 3.13)
@@ -89,6 +113,21 @@ jobs:
       - name: Verify runner architecture
         run: python ci/check_architecture.py "${{ matrix.expected_architecture }}"
 
+      - name: Key pip's cache on the najaeda release
+        # Every PyPI download of najaeda counts in its public download
+        # numbers: keep pip's cache, so a najaeda release is downloaded once
+        # per configuration. The JSON API is not a file download.
+        id: pip-cache
+        run: |
+          echo "dir=$(python -m pip cache dir)" >> "$GITHUB_OUTPUT"
+          echo "najaeda=$(python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/najaeda/json'))['info']['version'])")" >> "$GITHUB_OUTPUT"
+
+      - id: pip-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: pip-platforms-${{ runner.os }}-${{ runner.arch }}-py3.13-najaeda${{ steps.pip-cache.outputs.najaeda }}-${{ hashFiles('pyproject.toml') }}
+
       - name: Install package + test dependencies from wheels
         run: |
           python -m pip install --upgrade pip
@@ -103,3 +142,12 @@ jobs:
         run: |
           python examples/walkthrough.py
           python examples/gate_level.py
+
+      - name: Save pip's cache, even if the job fails
+        # actions/cache only saves on success: a failing job would
+        # download everything again on every run.
+        if: always() && steps.pip-cache.outputs.dir != '' && steps.pip-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: pip-platforms-${{ runner.os }}-${{ runner.arch }}-py3.13-najaeda${{ steps.pip-cache.outputs.najaeda }}-${{ hashFiles('pyproject.toml') }}
