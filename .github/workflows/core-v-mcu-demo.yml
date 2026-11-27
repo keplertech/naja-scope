@@ -42,7 +42,8 @@ jobs:
           echo "dir=$(python -m pip cache dir)" >> "$GITHUB_OUTPUT"
           echo "najaeda=$(python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/najaeda/json'))['info']['version'])")" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@v4
+      - id: pip-restore
+        uses: actions/cache/restore@v4
         with:
           path: ${{ steps.pip-cache.outputs.dir }}
           key: pip-core-v-mcu-${{ runner.os }}-${{ runner.arch }}-py3.11-najaeda${{ steps.pip-cache.outputs.najaeda }}-${{ hashFiles('pyproject.toml') }}
@@ -54,3 +55,12 @@ jobs:
 
       - name: Run the CORE-V-MCU demo (clones it, resolves the file list via fusesoc, MCP-only, no agent)
         run: ./examples/core_v_mcu_demo.sh
+
+      - name: Save pip's cache, even if the job fails
+        # actions/cache only saves on success: a failing job would
+        # download everything again on every run.
+        if: always() && steps.pip-cache.outputs.dir != '' && steps.pip-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: pip-core-v-mcu-${{ runner.os }}-${{ runner.arch }}-py3.11-najaeda${{ steps.pip-cache.outputs.najaeda }}-${{ hashFiles('pyproject.toml') }}

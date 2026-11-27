@@ -40,7 +40,8 @@ jobs:
           echo "dir=$(python -m pip cache dir)" >> "$GITHUB_OUTPUT"
           echo "najaeda=$(python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/najaeda/json'))['info']['version'])")" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@v4
+      - id: pip-restore
+        uses: actions/cache/restore@v4
         with:
           path: ${{ steps.pip-cache.outputs.dir }}
           key: pip-cva6-${{ runner.os }}-${{ runner.arch }}-py3.11-najaeda${{ steps.pip-cache.outputs.najaeda }}-${{ hashFiles('pyproject.toml') }}
@@ -52,3 +53,12 @@ jobs:
 
       - name: Run the CVA6 demo (clones CVA6 at a pinned tag, MCP-only, no agent)
         run: ./examples/cva6_demo.sh
+
+      - name: Save pip's cache, even if the job fails
+        # actions/cache only saves on success: a failing job would
+        # download everything again on every run.
+        if: always() && steps.pip-cache.outputs.dir != '' && steps.pip-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: pip-cva6-${{ runner.os }}-${{ runner.arch }}-py3.11-najaeda${{ steps.pip-cache.outputs.najaeda }}-${{ hashFiles('pyproject.toml') }}
